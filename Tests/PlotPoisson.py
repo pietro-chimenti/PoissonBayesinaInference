@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import math
 import emcee
 
+from Models import BasicPoisson as BP
+
 def main():
 
     print("First plot poisson distribution")
@@ -39,17 +41,14 @@ def main():
 
     print("Now let's draw random samples ")
 
-    def log_prob(mu):
-        if (mu > 0):
-            return np.log(gamma.pdf(mu,4))
-        else: return -1*math.inf
+    bp_model = BP.BasicPoisson 
 
     ndim, nwalkers = 1, 100
     a = [3+1]
     #p0 = np.ones((100,1)) 
     p0 = np.absolute(np.random.randn(nwalkers, ndim))
 
-    sampler = emcee.EnsembleSampler(nwalkers, 1, log_prob)
+    sampler = emcee.EnsembleSampler(nwalkers, 1, bp_model.log_like, args=([15]))
     sampler.run_mcmc(p0, 1000)
     samples = sampler.get_chain(flat=True)
     fig, ax = plt.subplots(1, 1)
