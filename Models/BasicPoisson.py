@@ -13,9 +13,12 @@ class BasicPoisson :
     
     def log_like(mu, *data):
         """ This function represent the logarithm of the poissonian likelihood"""
-        if (mu > 0):
-            return np.log(gamma.pdf(mu,data[0]+1))
+        if mu > 0 :
+            if data[0] < 100 : 
+                return data[0]*np.log(mu)-mu-np.log(float(math.factorial(data[0])))
+            else : # use stirling! Need to improve terms.
+                return data[0]*np.log(mu)-mu-data[0]*np.log(data[0])+data[0]
         else: return -1*math.inf
 
-
+#    def log_prior_uniform(mu)
 
