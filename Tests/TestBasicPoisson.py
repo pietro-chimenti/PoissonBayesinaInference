@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""This module tests the bayesian inference of the "basic" poissonian model.
-"""
+#"""This module tests the bayesian inference of the "basic" poissonian model."""
 
 import sys
 import numpy as np
@@ -12,9 +11,7 @@ import emcee
 
 from Models import BasicPoisson as BP
 
-def main():
-
-
+def main():    
     print("Input the observed value:")
     ov_string = input()
     try:
@@ -41,15 +38,23 @@ def main():
     sampler.run_mcmc(p0, 1000)
     samples = sampler.get_chain(flat=True)
     print("done!")
-
+    
     fig, ax = plt.subplots(1, 1)
-    ax.plot(samples[:, 0])
+    ax.plot(samples[:, 0], label="Dados Simulação")
+    plt.title("Simulação Cadeia de Markonikov")
     ax.legend(loc='best', frameon=False)
+    plt.grid(axis="x", linestyle="-.")
+    plt.axvline(x=20000, color="r", label="Corte de Dados")
+    plt.legend()
     plt.show()
     
     fig, ax = plt.subplots(1, 1)
-    ax.hist(samples[20000:, 0], 1000, color="k", histtype="step")
+    ax.hist(samples[20000:, 0], 1000, color="k", histtype="step", 
+    label="Dados Simulação")
+    plt.title("Distribuição de Poisson")
     ax.legend(loc='best', frameon=False)
+    plt.grid(linestyle="-.")
+    plt.legend()
     plt.show()
 
 
