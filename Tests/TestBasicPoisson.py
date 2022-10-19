@@ -41,20 +41,28 @@ def main():
     
     fig, ax = plt.subplots(1, 1)
     ax.plot(samples[:, 0], label="Dados Simulação")
-    plt.title("Simulação Cadeia de Markonikov")
+    plt.title("Simulação Cadeia de Markov")
     ax.legend(loc='best', frameon=False)
     plt.grid(axis="x", linestyle="-.")
     plt.axvline(x=20000, color="r", label="Corte de Dados")
     plt.legend()
+    plt.xlabel("numero de amostra")
+    plt.ylabel(r'$\lambda$')
     plt.show()
     
     fig, ax = plt.subplots(1, 1)
-    ax.hist(samples[20000:, 0], 1000, color="k", histtype="step", 
+    value, bins, _ = ax.hist(samples[20000:, 0], 1000, color="k", histtype="step", 
     label="Dados Simulação")
+    posterior = 12 * bins**ov * np.exp(-1.*bins)
+    norm=np.sum(posterior)
+    posterior = posterior * 80000 / norm
+    plt.plot(bins,posterior)
     plt.title("Distribuição de Poisson")
     ax.legend(loc='best', frameon=False)
     plt.grid(linestyle="-.")
     plt.legend()
+    plt.xlabel(r'$\lambda$')
+    plt.ylabel("p.d.f.")
     plt.show()
 
 
