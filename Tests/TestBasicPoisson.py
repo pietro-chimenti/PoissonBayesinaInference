@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-#"""This module tests the bayesian inference of the "basic" poissonian model."""
+"""This module tests the bayesian inference of the "basic" poissonian model.
+"""
 
 import sys
 import numpy as np
@@ -51,12 +52,10 @@ def main():
     plt.show()
     
     fig, ax = plt.subplots(1, 1)
-    value, bins, _ = ax.hist(samples[20000:, 0], 1000, color="k", histtype="step", 
+    value, bins, _ = ax.hist(samples[20000:, 0], 1000, color="k", histtype="step", density=True,
     label="Dados Simulação")
-    posterior = 12 * bins**ov * np.exp(-1.*bins)
-    norm=np.sum(posterior)
-    posterior = posterior * 80000 / norm
-    plt.plot(bins,posterior)
+    posterior = gamma.pdf(bins,ov+1)
+    plt.plot(bins,posterior, label="Solução analítica")
     plt.title("Distribuição de Poisson")
     ax.legend(loc='best', frameon=False)
     plt.grid(linestyle="-.")
