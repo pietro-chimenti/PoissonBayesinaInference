@@ -32,7 +32,8 @@ def main():
         mu_max = 5
 
     print("Running MCMC...")
-    bp_model = BP.BasicPoisson 
+    bp_model = BP.BasicPoisson()
+    
     ndim, nwalkers = 1, 100 
     p0 = mu_max*np.absolute(np.random.randn(nwalkers, ndim))
     sampler = emcee.EnsembleSampler(nwalkers, 1, bp_model.log_like, args=([ov]))
