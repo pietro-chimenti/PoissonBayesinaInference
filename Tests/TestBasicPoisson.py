@@ -32,11 +32,13 @@ def main():
         mu_max = 5
 
     print("Running MCMC...")
-    bp_model = BP.BasicPoisson()
+    #bp_model = BP.BasicPoisson()
+    #bp_model = BP.BasicPoisson(prior='jeffreys')
+    bp_model = BP.BasicPoisson(prior='gamma', mean = 1, std = 1)
     
     ndim, nwalkers = 1, 100 
     p0 = mu_max*np.absolute(np.random.randn(nwalkers, ndim))
-    sampler = emcee.EnsembleSampler(nwalkers, 1, bp_model.log_like, args=([ov]))
+    sampler = emcee.EnsembleSampler(nwalkers, 1, bp_model.log_prob, args=([ov]))
     sampler.run_mcmc(p0, 1000)
     samples = sampler.get_chain(flat=True)
     print("done!")

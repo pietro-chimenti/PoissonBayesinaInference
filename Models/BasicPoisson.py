@@ -21,17 +21,31 @@ class BasicPoisson :
         else: return -1*math.inf
 
     def log_prior_uniform(self, mu):
-        if mu < 0: return -1*math.inf
+        if mu <= 0: return -1*math.inf
         return 0
+
+    def log_prior_jeffreys(self, mu):
+        if mu <= 0: return -1.*math.inf
+        return -0.5*mu
+    
+    def log_prior_gamma(self, mu):
+        if mu <= 0: return -1.*math.inf
+        return (self.r-1)*mu-self.v*mu
     
     def log_prob(self, mu, *data):
         lp = self.log_prior(mu)
         if lp == -1.*math.inf: return -1.*math.inf
         ll = self.log_like(mu, *data)
         if ll == -1.*math.inf: return -1.*math.inf
-        return ll+lp, ll, lp
+        return ll+lp
     
-    def __init__(self, prior = 'uniform', *args):
+    def __init__(self, prior = 'uniform', mean = 0, std = 0, *args):
         if prior == 'uniform':
             self.log_prior = self.log_prior_uniform
-
+        if prior == 'jeffreys':
+            self.log_prior = self.log_prior_jeffreys 
+        if prior == 'gamma':
+            if mean == 0 or std == 0: raise ValueError('Prior mean and std must be positive!')
+            self.r = mean**2/std**2
+            self.v = mean/std**2
+            self.log_prior = self.log_prior_gamma
