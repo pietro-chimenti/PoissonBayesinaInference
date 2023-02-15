@@ -3,16 +3,12 @@
 """
 
 import sys
-import numpy as np
-from scipy.stats import poisson
-from scipy.stats import gamma
-import matplotlib.pyplot as plt
-import math
-import emcee
 
 from Models import BasicPoisson as BP
 
+
 def main():    
+
     print("Input the observed value:")
     ov_string = input()
     try:
@@ -24,25 +20,14 @@ def main():
         print("Observed value must not be negative!")
         sys.exit(0)
 
-
-    mu_min = round(ov-5*math.sqrt(ov))
-    mu_max = round(ov+5*math.sqrt(ov))
-    if ov == 0 :
-        mu_min = 0
-        mu_max = 5
-
-    print("Running MCMC...")
-    #bp_model = BP.BasicPoisson()
-    #bp_model = BP.BasicPoisson(prior='jeffreys')
-    bp_model = BP.BasicPoisson(prior='gamma', mean = 1, std = 1)
+    #bp_model = BP.BasicPoisson( observed_value=ov )
+    #bp_model = BP.BasicPoisson( observed_value=ov, prior='jeffreys' )
+    bp_model = BP.BasicPoisson( observed_value=ov ,prior='gamma', mean = 1, std = 1)
+    bp_model.run( samples = 2000, seed = 42 )    
     
-    ndim, nwalkers = 1, 100 
-    p0 = mu_max*np.absolute(np.random.randn(nwalkers, ndim))
-    sampler = emcee.EnsembleSampler(nwalkers, 1, bp_model.log_prob, args=([ov]))
-    sampler.run_mcmc(p0, 1000)
-    samples = sampler.get_chain(flat=True)
+
     print("done!")
-    
+    """
     fig, ax = plt.subplots(1, 1)
     ax.plot(samples[:, 0], label="Dados Simulação")
     plt.title("Simulação Cadeia de Markov")
@@ -66,7 +51,6 @@ def main():
     plt.xlabel(r'$\lambda$')
     plt.ylabel("p.d.f.")
     plt.show()
-
-
+    """
 if __name__ == "__main__":
     main()
