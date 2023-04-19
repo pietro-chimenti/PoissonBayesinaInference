@@ -18,7 +18,7 @@ def main():
         ov = int(ov_string)
     except ValueError:
         print("Value Error: must be an integer!")
-        sys.exit(0)    
+            sys.exit(0)    7
     if ov < 0 :
         print("Observed value must not be negative!")
         sys.exit(0)
@@ -35,12 +35,13 @@ def main():
     #constantes
     ov = 5
     credible_interval = 0.95
-    prior = 'gamma'
-    mean = 4
+    prior = 'uniform'
+    mean = 5
     stan_desv = 2
     
     #rodadando o código
     model = BP.BasicPoisson(observed_value=ov,prior = prior, mean = mean, std = stan_desv)
+
     x = model.interval
     y = model.distribution
     
@@ -52,10 +53,10 @@ def main():
     
     #Intervalo de Credibilidade HDI
     up3, down3 = model.credible_interval(trust= credible_interval, option = 3)
-    
+
     #gráfico
     plt.plot(x, y)
-    plt.title("Posterior Distribution")
+    plt.title("Posterior Parameter Distribution")
     plt.xlabel("mu")
     plt.ylabel("p.d.f.")
     plt.axvline(x = up1, color = 'r', label = 'Upper limit')
@@ -67,10 +68,17 @@ def main():
     plt.legend()
     plt.grid()
     plt.show()  
-    
+
     #tabela de dados
     model.data_summarry()
-
+    
+    #posterior prediction
+    postx, posty, _ = model.predictive_posterior_run()
+    plt.plot(postx,posty)
+    plt.title("Posterior Predictive Distribution")
+    plt.ylabel("p.d.f.")
+    plt.show()
+    
 
 if __name__ == "__main__":
     main()
