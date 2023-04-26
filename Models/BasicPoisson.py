@@ -26,8 +26,8 @@ class BasicPoisson :
                 r (int): updated shape parameter
                 v (int): updated scale parameter
         '''
-        r = data + shape
-        v = 1 + scale
+        r = sum(data) + shape
+        v =  len(data) + scale
         return r, v
     
 
@@ -88,15 +88,12 @@ class BasicPoisson :
                 upper_limit(float): highest point of the interval
         '''
         if option == 1:
-            lower_limit = gamma.ppf(0., self.r, scale = 1/self.v)
             upper_limit = gamma.ppf(trust, self.r, scale = 1/self.v)
-            print(f'The upper limit credible interval is: ({lower_limit},{upper_limit})')
-            return lower_limit, upper_limit
+            return upper_limit
         elif option == 2:
             itv = (1 - trust)/2
             lower_limit = gamma.ppf(itv, self.r, scale = 1/self.v)
             upper_limit = gamma.ppf(1 - itv , self.r, scale = 1/self.v)
-            print(f'The Symmetrical credible interval is: ({lower_limit},{upper_limit})')
             return lower_limit, upper_limit
         elif option == 3:
             
@@ -116,7 +113,6 @@ class BasicPoisson :
             width = optimize_result.fun
                 #acha o valor superior somando ao intervalo
             upper_limit = lower_limit + width
-            print(f'The High Density Credible Interval is: ({lower_limit},{upper_limit})')
             return lower_limit, upper_limit
         else:
             print("Invalid Input")
@@ -128,14 +124,13 @@ class BasicPoisson :
             This function receives gamma's prior parameters and return the updated
             negative binomial posterior predictive distribution NB(alpha,beta)'''
             alpha = r
-            beta = 1 - v/(v+1)
+            beta = v/(v+1)
             return alpha, beta
         alpha, beta = negative_binomial_change(r = self.r,v = self.v)
         x = np.arange(nbinom.ppf(0.0001,n=alpha, p=beta),nbinom.ppf(0.999,n=alpha,p=beta))
         post_predi = nbinom.pmf(x, n=alpha, p= beta)
         
         p_value = 1 - nbinom.pmf(self.ov,n=alpha, p=beta)
-        print(f'The p-value is:{p_value}')
         return x, post_predi, p_value
     
     
