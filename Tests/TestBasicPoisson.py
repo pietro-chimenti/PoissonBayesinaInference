@@ -35,8 +35,8 @@ def main():
     '''    
     
     #SAMPLER
-    size = 1000
-    mu=4
+    size = 3000
+    mu = 4
     
     #Holdout Cross Verification 50%
     sample = poisson.rvs(mu,size = size) 
@@ -46,22 +46,22 @@ def main():
     
     #constantes
     credible_interval = 0.95
-    prior = 'jeffreys'
-    mean = 10
-    stan_desv = 2
+    prior = 'uniform'
     
+    mean = 10
+    stan_desv = 3.
     #rodadando o código
     model = BP.BasicPoisson(observed_value=ov,prior = prior, mean = mean, std = stan_desv)
 
     x = model.interval
     y = model.distribution
-    
+    '''
     #Intervalo de Credibilidade Limite Superior
     up1= model.credible_interval(trust = credible_interval, option = 1)
-
+    
     #Intervalo de Credibilidade Simetrico
     up2, down2 = model.credible_interval(trust= credible_interval, option = 2)
-    
+    '''
     #Intervalo de Credibilidade HDI
     up3, down3 = model.credible_interval(trust= credible_interval, option = 3)
 
@@ -70,9 +70,9 @@ def main():
     plt.title("Posterior Parameter Distribution")
     plt.xlabel("mu")
     plt.ylabel("p.d.f.")
-    plt.axvline(x = up1, color = 'r', label = 'Upper limit')
-    plt.axvline(x = up2, color = 'g', label = 'Symmetrical')
-    plt.axvline(x = down2, color = 'g')
+   # plt.axvline(x = up1, color = 'r', label = 'Upper limit')
+   # plt.axvline(x = up2, color = 'g', label = 'Symmetrical')
+    #plt.axvline(x = down2, color = 'g')
     plt.axvline(x = up3, color = 'm', label = 'HDI')
     plt.axvline(x = down3, color = 'm')
     plt.legend()
@@ -97,10 +97,10 @@ def main():
     plt.show()
     
     #prints
-    '''
+    
     print(f'the observed data is:{ov}')
     print(f'the p-value list is:{p_value}')
-    '''
+    
     
 if __name__ == "__main__":
     main()
