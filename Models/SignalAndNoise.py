@@ -8,81 +8,120 @@ import numpy as np
 from scipy.stats import gamma 
 
 class SignalAndNoise :
-    """This class represent a double parameter poissonian model for bayesian analysis using
-    Monte Carlo Markov Chain"""
+    """This class represent signal(on) and noise(off) parameter poissonian inference model for 
+    bayesian analysis using Monte Carlo Markov Chain"""
     
 
-    '''PRIOR OFF:'''
+    '''PRIOR both OFF and ON:'''  #é generico pois vamos depois aplicar para OFF e ON separados
         
-    def log_prior_off_uniform(self, mu):
-        if mu > 0:
-            return 0
-        else:
-            return - math.inf
+    def log_prior_uniform(self, mu, alpha=0, beta=0): 
+        self.log_mu = []
+        for i in mu:
+            if i > 0:
+                self.log_mu.append(0)
+            else:
+                self.log_mu.append(- math.inf)   #retorno para ser rejeitado na função de aceptancia
+        self.log_mu = np.array(self.log_mu)
+        return self.log_mu        #retorna um array, mas selecionamos a entrada certa depois
     
-    def log_prior_off_jeffrey(self, mu):
-        if mu > 0:
-            return 0.5*np.log(mu)
-        else:
-            return -math.inf
+    def log_prior_jeffrey(self, mu, alpha=0, beta=0):        
+        self.log_mu = []
+        for i in mu:
+            if i > 0:
+                self.log_mu.append(0.5*np.log(i))
+            else:
+                self.log_mu.append(- math.inf)
+        self.log_mu = np.array(self.log_mu)
+        return self.log_mu
         
-    def log_prior_off_gamma(self,mu, alpha, beta):
-        if mu > 0:
-            self.gamma = gamma.pdf(mu, alpha, scale = 1/beta)
-            return np.log(self.gamma)
-        else:
-            return -math.inf 
+    def log_prior_gamma(self,mu, alpha, beta):
+        self.log_mu = []
+        for i in mu:
+            if i > 0:
+                self.gamma = gamma.pdf(i, alpha, scale = 1/beta)
+                self.log_mu.append(np.log(self.gamma))
+            else:
+                self.log_mu.append(- math.inf)
+        self.log_mu = np.array(self.log_mu)
+        return self.log_mu
         
-    '''PRIOR OFF+ON'''
-        
-    def log_prior_off_on_uniform(self, mu_on, mu_off):
-        if mu_off > 0 and mu_on > 0:
-            return 0
-        else:
-            return - math.inf
-        
-    def log_prior_off_on_jeffrey(self, mu_on, mu_off):
-           if mu_off > 0 and mu_on > 0:
-               return 0.5*np.log(mu_on + mu_off)
-           else:
-               return -math.inf
-            
-    def log_prior_off_on_gamma(self,mu_on, mu_off, alpha, beta):
-        if mu_off > 0 and mu_on > 0:
-            self.gamma = gamma.pdf(mu_on + mu_off, alpha, scale = 1/beta)
-            return np.log(self.gamma)
-        else:
-            return -math.inf 
-        
-    '''LIKELYHOOD'''
-    
+    '''LIKELYHOOD'''  # estamos considerando uma entrada do tipo: mu = [mu_off, mu_on]
+
     def log_like_off(self,mu,data):
-        if mu > 0:
-            if data <= 20 and data >0 :
-                return -mu + data*np.log(mu) - np.log(math.factorial(data))
-            elif data > 20: #aprox de stirling
-                return -mu+data*np.log(mu)-data*np.log(data)+data-0.5*np.log(2*data*math.pi)
-            else:
-                return print('Data must be an positive integer!')
-        else: 
+        self.data = np.array(data)
+        self.factorial = []
+        if mu[0] > 0:
+            for value in self.data:
+                if value <= 20 and value > 0 : #menor que vinte a função np.log consegue resolver numericamente
+                    self.factorial.append(- np.log(math.factorial(value)))
+                elif value > 20: #aprox de stirling 
+                    self.factorial.append(-value*np.log(value)+value-0.5*np.log(2*value*math.pi))  
+            self.factorial = np.array(self.factorial)
+            return -len(self.data)*mu[0] + np.sum(self.data)*np.log(mu[0]) + np.sum(self.factorial)
+        else:  
             return - math.inf
         
-    def log_like_off_on(self,mu_on, mu_off ,data):
-        self.mu_sum = mu_on + mu_off
-        if mu_on > 0 and mu_off > 0:
-            if data <= 20 and data >0 :
-                return - self.mu_sum + data*np.log(self.mu_sum) - np.log(math.factorial(data))
-            elif data > 20: #aprox de stirling
-                return -self.mu_sum+data*np.log(self.mu_sum)-data*np.log(data)+data-0.5*np.log(2*data*math.pi)
-            else:
-                return print('Data must be an positive integer!')
+    def log_like_on(self,mu,data): 
+        self.mu_off = mu[0]    
+        self.mu_on = mu[1]
+        self.data = np.array(data)
+        self.factorial = []
+        self.mu_sum = (self.mu_on + self.mu_off)
+        
+        if self.mu_off > 0 and self.mu_on > 0:
+            for value in self.data:
+                if value <= 20 and value > 0 : #menor que vinte a função np.log consegue resolver
+                    self.factorial.append(- np.log(math.factorial(value)))
+                elif value > 20:               #aprox de stirling
+                    self.factorial.append(-value*np.log(value)+value-0.5*np.log(2*value*math.pi))  
+            self.factorial = np.array(self.factorial)
+            return -len(self.data)*self.mu_sum + np.sum(self.data)*np.log(self.mu_sum) + np.sum(self.factorial)
         else: 
             return - math.inf        
-    
         
-    def __init__(self, observed_value):
+    def __init__(self, observed_value_off, observed_value_on, prior_off='uniform',
+                 prior_on = 'uniform', mean_off=1, mean_on=1, std_off = 1, std_on=1):
+        
+        self.ov_off = np.array(observed_value_off)
+        self.ov_on = np.array(observed_value_on)
+        
+        
+        if prior_off == 'uniform':
+            self.log_prior_off = self.log_prior_uniform
+        elif prior_off == 'jeffrey':
+            self.log_prior_off = self.log_prior_jeffrey
+        elif prior_off == 'gamma': 
+            self.log_prior_off = self.log_prior_gamma
+        else:
+            print('Put a valid prior')
+
+        if prior_on == 'uniform':
+            self.log_prior_on = self.log_prior_uniform
+        elif prior_on == 'jeffrey':
+            self.log_prior_on = self.log_prior_jeffrey
+        elif prior_on == 'gamma':
+            self.log_prior_on = self.log_prior_gamma
+        else:
+            print('Put a valid prior')  
+            
+        self.alpha = mean_on**2/std_on**2
+        self.beta = mean_on/std_on**2
+        self.alpha = mean_off**2/std_off**2
+        self.beta = mean_off/std_off**2
         
         print('it´s working!')
-
+                
+    def log_posterior(self, mu):
+        self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha, beta = self.beta)
+        self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha, beta = self.beta)
+        self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
+        self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
+            
+        return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off
+            
+        
+    
+        
+        
     
     

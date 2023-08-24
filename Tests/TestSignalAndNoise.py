@@ -10,23 +10,22 @@ from Models import SignalAndNoise as SN
 
 
 def main():
-
-    ov = 2
     
-    test = SN.SignalAndNoise(ov)
-
-    prior_test1 = test.log_prior_off_on_gamma(mu_on=2, mu_off=2, alpha=2, beta=1)
-    prior_test2 = test.log_prior_off_gamma(mu=4, alpha=2, beta=1)
-    print(prior_test1,prior_test2)
+    test1 = SN.SignalAndNoise([1,2], [3,4],'jeffrey','uniform')
+    post1 = test1.log_posterior(mu=[10,2])
+    print(post1)
     
-    prior_test3 = test.log_prior_off_jeffrey(mu = 2)
-    prior_test4 = test.log_prior_off_on_jeffrey(mu_on = 1, mu_off=1)
-    print(prior_test3,prior_test4)
-
-    data = 10
-    like1 = test.log_like_off(mu=4, data=data)
-    like2 = test.log_like_off_on(mu_on=2, mu_off=2, data=data)
-    print(like1,like2)
+    test2 = SN.SignalAndNoise([1,2], [3,4],'gamma','uniform',mean_off= 2, std_off=2)
+    post2 = test2.log_posterior(mu=[10,6])
+    print(post2)
     
+    test3 = SN.SignalAndNoise([1,2,5,8,10], [3,4,5,3],'gamma','gamma',mean_on=50, std_off=20)
+    post3 = test3.log_posterior(mu=[30,21])
+    print(post3)
+    
+    test4 = SN.SignalAndNoise([-1,2], [3,4],'jeffrey','uniform')
+
+    post4 = test4.log_posterior(mu=[10,-12])
+    print(post4)
 if __name__ == "__main__":
     main()
