@@ -12,7 +12,7 @@ class SignalAndNoise :
     """This class represent signal(on) and noise(off) parameter poissonian inference model for 
     bayesian analysis using Monte Carlo Markov Chain"""
     
-
+    
     '''PRIOR both OFF and ON:'''  #é generico pois vamos depois aplicar para OFF e ON separados
         
     def log_prior_uniform(self, mu, alpha=0, beta=0): 
@@ -47,7 +47,7 @@ class SignalAndNoise :
         return self.log_mu
         
     '''LIKELYHOOD'''  # estamos considerando uma entrada do tipo: mu = [mu_off, mu_on]
-
+    
     def log_like_off(self,mu,data):
         self.data = np.array(data)
         self.factorial = []
@@ -83,10 +83,14 @@ class SignalAndNoise :
     def __init__(self, observed_value_off, observed_value_on, prior_off='uniform',
                  prior_on = 'uniform', mean_off=1, mean_on=1, std_off = 1, std_on=1):
         
+        #constantes
+        self.ndim, self.nwalkers = 2, 100
+        
+        #guarda o array de dados
         self.ov_off = np.array(observed_value_off)
         self.ov_on = np.array(observed_value_on)
         
-        
+        #seleciona o tipo de prior 
         if prior_off == 'uniform':
             self.log_prior_off = self.log_prior_uniform
         elif prior_off == 'jeffrey':
@@ -95,7 +99,7 @@ class SignalAndNoise :
             self.log_prior_off = self.log_prior_gamma
         else:
             print('Put a valid prior')
-
+            
         if prior_on == 'uniform':
             self.log_prior_on = self.log_prior_uniform
         elif prior_on == 'jeffrey':
@@ -105,20 +109,11 @@ class SignalAndNoise :
         else:
             print('Put a valid prior')  
             
+        #calcula o valor dos parametros da prior gamma    
         self.alpha = mean_on**2/std_on**2
         self.beta = mean_on/std_on**2
         self.alpha = mean_off**2/std_off**2
         self.beta = mean_off/std_off**2
-                
-        def log_posterior(self, mu):
-            self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha, beta = self.beta)
-            self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha, beta = self.beta)
-            self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
-            self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
-                
-            return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off
-        
-        self.ndim, self.nwalkers = 2, 100
         
         # stats of a gamma sampler for p0
         m_off = np.mean(self.ov_off)
@@ -126,6 +121,7 @@ class SignalAndNoise :
         m_on = np.mean(self.ov_on)
         dp_on = np.std(self.ov_on)
 
+        #calcula o valor inicial a partir de uma amostragem gamma de parametros baseados nos dados
         self.p0 = np.array([np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], #first value
                                                     scale=[dp_off**2/m_off,dp_on**2/m_on])])
                             
@@ -134,11 +130,22 @@ class SignalAndNoise :
                                                         scale=[dp_off**2/m_off,dp_on**2/m_on])
             self.p0 = np.append(self.p0,[gamma],axis=0)
         
-        print(self.p0)
-        print('it´s working!')
 
-    
+    def log_posterior(self, mu):
+        self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha, beta = self.beta)
+        self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha, beta = self.beta)
+        self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
+        self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
+            
+        return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off 
+           
+    def run (self, samples = 10000, seed = 42):
+        np.random.seed(seed)
+        sampler = emcee.EnsembleSampler(self.nwalkers, self.ndim, self.log_posterior)
+        sampler.run_mcmc(self.p0, samples)
+        self.samples_list = sampler.get_chain(flat=True)
+        print("the chain is done")
         
-        
+        return self.samples_list
     
     
