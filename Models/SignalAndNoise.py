@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""This files provides basic tools to make bayesian inferences on simple poissonian models.
+"""This files provides basic tools to make bayesian inferences for poisson proceses with background only data and background plus signal.
 """
 
 
@@ -109,11 +109,12 @@ class SignalAndNoise :
         else:
             print('Put a valid prior')  
             
-        #calcula o valor dos parametros da prior gamma    
-        self.alpha = mean_on**2/std_on**2
-        self.beta = mean_on/std_on**2
-        self.alpha = mean_off**2/std_off**2
-        self.beta = mean_off/std_off**2
+        #calcula o valor dos parametros da prior gamma 
+        # CuiDADO: alpha ON and OFF
+        self.alpha_on = mean_on**2/std_on**2
+        self.beta_on = mean_on/std_on**2
+        self.alpha_off = mean_off**2/std_off**2
+        self.beta_off = mean_off/std_off**2
         
         # stats of a gamma sampler for p0
         m_off = np.mean(self.ov_off)
@@ -132,17 +133,21 @@ class SignalAndNoise :
         
 
     def log_posterior(self, mu):
-        self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha, beta = self.beta)
-        self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha, beta = self.beta)
+        self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha_on, beta = self.beta_on)
+        self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha_off, beta = self.beta_off)
         self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
         self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
             
         return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off 
            
-    def run (self, samples = 10000, seed = 42):
+    def run (self, samples = 10000, seed = 42, burn_in = 1000):
         np.random.seed(seed)
         sampler = emcee.EnsembleSampler(self.nwalkers, self.ndim, self.log_posterior)
-        sampler.run_mcmc(self.p0, samples)
+        #burn in 
+        self.state = sampler.run_mcmc(self.p0, burn_in)
+        sampler.reset()
+        #real chain
+        sampler.run_mcmc(self.state, samples,progress=(True))
         self.samples_list = sampler.get_chain(flat=True)
         print("the chain is done")
         
