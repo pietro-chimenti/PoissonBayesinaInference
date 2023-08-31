@@ -7,6 +7,7 @@ import math
 import numpy as np
 from scipy.stats import gamma 
 import emcee 
+import arviz as az
 
 class SignalAndNoise :
     """This class represent signal(on) and noise(off) parameter poissonian inference model for 
@@ -140,17 +141,22 @@ class SignalAndNoise :
             
         return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off 
            
-    def run (self, samples = 10000, seed = 42, burn_in = 1000):
-        np.random.seed(seed)
-        sampler = emcee.EnsembleSampler(self.nwalkers, self.ndim, self.log_posterior)
-        #burn in 
-        self.state = sampler.run_mcmc(self.p0, burn_in)
-        sampler.reset()
-        #real chain
-        sampler.run_mcmc(self.state, samples,progress=(True))
-        self.samples_list = sampler.get_chain(flat=True)
-        print("the chain is done")
+    def run (self, samples = 10000, burn_in = 1000):
+        self.samples_list = []
         
-        return self.samples_list
+        for i in range(5):
+            print("Running chain n.",i)
+            np.random.seed(7*i+1) #nenhuma razão, poderia ser qualquer numero
+            sampler = emcee.EnsembleSampler(self.nwalkers, self.ndim, self.log_posterior)
+            
+            self.state = sampler.run_mcmc(self.p0, burn_in, progress=(True)) #burn in 
+            sampler.reset()
+            
+            sampler.run_mcmc(self.state, samples,progress=(True)) #real chain
+            self.samples_list.append(sampler.get_chain(flat=True))
+        
+        return np.array(self.samples_list)
+    
+    
     
     
