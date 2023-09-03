@@ -8,6 +8,7 @@ import numpy as np
 from scipy.stats import gamma 
 import emcee 
 import arviz as az
+import xarray as xr
 
 class SignalAndNoise :
     """This class represent signal(on) and noise(off) parameter poissonian inference model for 
@@ -85,7 +86,7 @@ class SignalAndNoise :
                  prior_on = 'uniform', mean_off=1, mean_on=1, std_off = 1, std_on=1):
         
         #constantes
-        self.ndim, self.nwalkers = 2, 100
+        self.ndim =  2
         
         #guarda o array de dados
         self.ov_off = np.array(observed_value_off)
@@ -117,20 +118,7 @@ class SignalAndNoise :
         self.alpha_off = mean_off**2/std_off**2
         self.beta_off = mean_off/std_off**2
         
-        # stats of a gamma sampler for p0
-        m_off = np.mean(self.ov_off)
-        dp_off = np.std(self.ov_off)
-        m_on = np.mean(self.ov_on)
-        dp_on = np.std(self.ov_on)
 
-        #calcula o valor inicial a partir de uma amostragem gamma de parametros baseados nos dados
-        self.p0 = np.array([np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], #first value
-                                                    scale=[dp_off**2/m_off,dp_on**2/m_on])])
-                            
-        for i in np.arange(self.nwalkers-1):
-            gamma = np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], 
-                                                        scale=[dp_off**2/m_off,dp_on**2/m_on])
-            self.p0 = np.append(self.p0,[gamma],axis=0)
         
 
     def log_posterior(self, mu):
@@ -140,23 +128,90 @@ class SignalAndNoise :
         self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
             
         return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off 
-           
-    def run (self, samples = 10000, burn_in = 1000):
+            
+    def run (self, samples = 10000, burn_in = 1000, n_chains = 5, nwalkers = 100 ):
         self.samples_list = []
+       
         
-        for i in range(5):
+        # stats of a gamma sampler for p0
+        m_off, dp_off = np.mean(self.ov_off), np.std(self.ov_off)
+        m_on, dp_on = np.mean(self.ov_on), np.std(self.ov_on)
+        #calcula o valor inicial a partir de uma amostragem gamma de parametros baseados nos dados
+        self.p0 = np.array([np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], #first value
+                                                    scale=[dp_off**2/m_off,dp_on**2/m_on])])
+        
+        for i in np.arange(nwalkers-1):
+            gamma = np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], 
+                                                        scale=[dp_off**2/m_off,dp_on**2/m_on])
+            self.p0 = np.append(self.p0,[gamma],axis=0)
+            
+            
+        
+        for i in range(n_chains):
             print("Running chain n.",i)
-            np.random.seed(7*i+1) #nenhuma razão, poderia ser qualquer numero
-            sampler = emcee.EnsembleSampler(self.nwalkers, self.ndim, self.log_posterior)
-            
-            self.state = sampler.run_mcmc(self.p0, burn_in, progress=(True)) #burn in 
-            sampler.reset()
-            
-            sampler.run_mcmc(self.state, samples,progress=(True)) #real chain
-            self.samples_list.append(sampler.get_chain(flat=True))
+            np.random.seed(42 + 7*i) #nenhuma razão, poderia ser qualquer o numero 
         
-        return np.array(self.samples_list)
+            self.sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.log_posterior)
+            print("Burn_in progress:")
+            self.state = self.sampler.run_mcmc(self.p0, burn_in, progress=(True)) #burn in 
+            self.sampler.reset()
+            print("Chain progress:")    
+            self.sampler.run_mcmc(self.state, samples,progress=(True)) #real chain
+            self.samples_list.append(self.sampler.get_chain(flat=False))
+            
+        self.n_chains = n_chains
+        self.nwalkers = nwalkers
+        self.samples = samples
+        self.chains = np.array(self.samples_list)
+        
+        return self.chains
     
+    def full_arviz_dataset(self,labels=["mu_off","mu_on"]):
+        mu_off = self.chains[:,:,:,0]
+        mu_on = self.chains[:,:,:,1]
+        xrdata = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["chain","draw","walker"],mu_off),
+                  labels[1]: (["chain","draw","walker"],mu_on)
+                 },
+            coords= {
+                "chain": (["chain"],np.arange(self.n_chains)),
+                "draw":(["draw"],np.arange(self.samples)),
+                "walker": (["walker"],np.arange(self.nwalkers))
+                }
+            )
+        dataset = az.InferenceData(posterior = xrdata)
+        return dataset
+        
+    def diff_seed_arviz_dataset(self,labels=["mu_off","mu_on"]):
+        mu_off = self.chains[:,:,0,0]
+        mu_on = self.chains[:,:,0,1]
+        xrdata = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["chain","draw"],mu_off),
+                  labels[1]: (["chain","draw"],mu_on)
+                 },
+            coords= {
+                "chain": (["chain"],np.arange(self.n_chains)),
+                "draw":(["draw"],np.arange(self.samples)),
+                }
+            )
+        dataset = az.InferenceData(posterior = xrdata)
+        return dataset
     
-    
-    
+    def single_chain_arvis_dataset(self,labels=["mu_off","mu_on"]):
+        self.tr_chains = self.chains.transpose(0,2,1,3)
+        mu_off = self.tr_chains[0,:,:,0]
+        mu_on = self.tr_chains[0,:,:,1]
+        xrdata = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["chain","draw"],mu_off),
+                  labels[1]: (["chain","draw"],mu_on)
+                 },
+            coords= {
+                "chain": (["chain"],np.arange(self.nwalkers)),
+                "draw":(["draw"],np.arange(self.samples)),
+                }
+            )
+        dataset = az.InferenceData(posterior = xrdata)
+        return dataset
