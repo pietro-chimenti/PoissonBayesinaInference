@@ -180,7 +180,13 @@ class SignalAndNoise :
                 "walker": (["walker"],np.arange(self.nwalkers))
                 }
             )
-        dataset = az.InferenceData(posterior = xrdata)
+        xrobs = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["data"],self.ov_off),
+                  labels[1]: (["data"],self.ov_on)
+                 }
+            )
+        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
         return dataset
         
     def diff_seed_arviz_dataset(self,labels=["mu_off","mu_on"]):
@@ -196,11 +202,18 @@ class SignalAndNoise :
                 "draw":(["draw"],np.arange(self.samples)),
                 }
             )
-        dataset = az.InferenceData(posterior = xrdata)
+        xrobs = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["data"],self.ov_off),
+                  labels[1]: (["data"],self.ov_on)
+                 }
+            )
+        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
         return dataset
     
     def single_chain_arvis_dataset(self,labels=["mu_off","mu_on"]):
-        self.tr_chains = self.chains.transpose(0,2,1,3)
+        ch = self.chains
+        self.tr_chains = ch.transpose(0,2,1,3)
         mu_off = self.tr_chains[0,:,:,0]
         mu_on = self.tr_chains[0,:,:,1]
         xrdata = xr.Dataset(
@@ -213,5 +226,11 @@ class SignalAndNoise :
                 "draw":(["draw"],np.arange(self.samples)),
                 }
             )
-        dataset = az.InferenceData(posterior = xrdata)
+        xrobs = xr.Dataset(
+            data_vars = {
+                  labels[0]: (["data"],self.ov_off),
+                  labels[1]: (["data"],self.ov_on)
+                 }
+            )
+        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
         return dataset
