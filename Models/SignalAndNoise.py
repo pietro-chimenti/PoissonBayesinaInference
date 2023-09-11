@@ -2,13 +2,13 @@
 """This files provides basic tools to make bayesian inferences for poisson proceses with background only data and background plus signal.
 """
 
-
 import math 
 import numpy as np
 from scipy.stats import gamma 
 import emcee 
 import arviz as az
 import xarray as xr
+import matplotlib.pyplot as plt
 
 class SignalAndNoise :
     """This class represent signal(on) and noise(off) parameter poissonian inference model for 
@@ -17,36 +17,50 @@ class SignalAndNoise :
     
     '''PRIOR both OFF and ON:'''  #é generico pois vamos depois aplicar para OFF e ON separados
         
-    def log_prior_uniform(self, mu, alpha=0, beta=0): 
-        self.log_mu = []
-        for i in mu:
-            if i > 0:
-                self.log_mu.append(0)
-            else:
-                self.log_mu.append(- math.inf)   #retorno para ser rejeitado na função de aceptancia
-        self.log_mu = np.array(self.log_mu)
-        return self.log_mu        #retorna um array, mas selecionamos a entrada certa depois
+    def log_prior_uniform_off(self, mu, alpha=0, beta=0): 
+        self.mu_off = mu[0]
+        if self.mu_off > 0:
+            return 0
+        else:
+            return -math.inf   #retorno para ser rejeitado na função de aceptancia
     
-    def log_prior_jeffrey(self, mu, alpha=0, beta=0):        
-        self.log_mu = []
-        for i in mu:
-            if i > 0:
-                self.log_mu.append(0.5*np.log(i))
-            else:
-                self.log_mu.append(- math.inf)
-        self.log_mu = np.array(self.log_mu)
-        return self.log_mu
+    def log_prior_jeffrey_off(self, mu, alpha=0, beta=0):        
+        self.mu_off = mu[0]
+        if self.mu_off > 0:
+            return 0.5*np.log(self.mu_off)
+        else:
+            return -math.inf
         
-    def log_prior_gamma(self,mu, alpha, beta):
-        self.log_mu = []
-        for i in mu:
-            if i > 0:
-                self.gamma = gamma.pdf(i, alpha, scale = 1/beta)
-                self.log_mu.append(np.log(self.gamma))
-            else:
-                self.log_mu.append(- math.inf)
-        self.log_mu = np.array(self.log_mu)
-        return self.log_mu
+    def log_prior_gamma_off(self, mu, alpha, beta):
+        self.mu_off = mu[0]
+        if self.mu_off > 0:
+            self.gamma = gamma.pdf(self.mu_off, alpha, scale = 1/beta)
+            return np.log(self.gamma)
+        else:
+            return - math.inf
+        
+    def log_prior_uniform_on(self, mu, alpha=0, beta=0): 
+        self.mu_on = mu[1]
+        if self.mu_on > 0:
+            return 0
+        else:
+            return -math.inf   
+    
+    def log_prior_jeffrey_on(self, mu, alpha=0, beta=0):        
+        self.mu_on = mu[1]
+        if self.mu_on > 0:
+            return 0.5*np.log(self.mu_on)
+        else:
+            return -math.inf
+        
+    def log_prior_gamma_on(self, mu, alpha, beta):
+        self.mu_on = mu[1]
+        if self.mu_on > 0:
+            self.gamma = gamma.pdf(self.mu_on, alpha, scale = 1/beta)
+            return np.log(self.gamma)
+        else:
+            return - math.inf
+    
         
     '''LIKELYHOOD'''  # estamos considerando uma entrada do tipo: mu = [mu_off, mu_on]
     
@@ -84,7 +98,6 @@ class SignalAndNoise :
         
     def __init__(self, observed_value_off, observed_value_on, prior_off='uniform',
                  prior_on = 'uniform', mean_off=1, mean_on=1, std_off = 1, std_on=1):
-        
         #constantes
         self.ndim =  2
         
@@ -94,42 +107,38 @@ class SignalAndNoise :
         
         #seleciona o tipo de prior 
         if prior_off == 'uniform':
-            self.log_prior_off = self.log_prior_uniform
+            self.log_prior_off = self.log_prior_uniform_off
         elif prior_off == 'jeffrey':
-            self.log_prior_off = self.log_prior_jeffrey
+            self.log_prior_off = self.log_prior_jeffrey_off
         elif prior_off == 'gamma': 
-            self.log_prior_off = self.log_prior_gamma
+            self.log_prior_off = self.log_prior_gamma_off
         else:
             print('Put a valid prior')
             
         if prior_on == 'uniform':
-            self.log_prior_on = self.log_prior_uniform
+            self.log_prior_on = self.log_prior_uniform_on
         elif prior_on == 'jeffrey':
-            self.log_prior_on = self.log_prior_jeffrey
+            self.log_prior_on = self.log_prior_jeffrey_on
         elif prior_on == 'gamma':
-            self.log_prior_on = self.log_prior_gamma
+            self.log_prior_on = self.log_prior_gamma_on
         else:
             print('Put a valid prior')  
             
         #calcula o valor dos parametros da prior gamma 
-        # CuiDADO: alpha ON and OFF
         self.alpha_on = mean_on**2/std_on**2
         self.beta_on = mean_on/std_on**2
         self.alpha_off = mean_off**2/std_off**2
         self.beta_off = mean_off/std_off**2
         
-
-        
-
     def log_posterior(self, mu):
         self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha_on, beta = self.beta_on)
         self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha_off, beta = self.beta_off)
         self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
         self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
             
-        return float(self.lp_on[1]) + float(self.lp_off[0]) + self.ll_on + self.ll_off 
+        return self.lp_on + self.lp_off + self.ll_on + self.ll_off 
             
-    def run (self, samples = 10000, burn_in = 1000, n_chains = 5, nwalkers = 100 ):
+    def run (self, samples = 10000, burn_in = 1000, n_chains = 8, nwalkers = 100 ):
         self.samples_list = []
        
         
@@ -144,9 +153,7 @@ class SignalAndNoise :
             gamma = np.random.gamma([m_off**2/dp_off**2,m_on**2/dp_on**2 ], 
                                                         scale=[dp_off**2/m_off,dp_on**2/m_on])
             self.p0 = np.append(self.p0,[gamma],axis=0)
-            
-            
-        
+        #run the chains
         for i in range(n_chains):
             print("Running chain n.",i)
             np.random.seed(42 + 7*i) #nenhuma razão, poderia ser qualquer o numero 
@@ -180,13 +187,15 @@ class SignalAndNoise :
                 "walker": (["walker"],np.arange(self.nwalkers))
                 }
             )
+        '''
         xrobs = xr.Dataset(
             data_vars = {
                   labels[0]: (["data"],self.ov_off),
                   labels[1]: (["data"],self.ov_on)
                  }
             )
-        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
+        '''
+        dataset = az.InferenceData(posterior = xrdata)
         return dataset
         
     def diff_seed_arviz_dataset(self,labels=["mu_off","mu_on"]):
@@ -202,13 +211,15 @@ class SignalAndNoise :
                 "draw":(["draw"],np.arange(self.samples)),
                 }
             )
+        '''
         xrobs = xr.Dataset(
             data_vars = {
                   labels[0]: (["data"],self.ov_off),
                   labels[1]: (["data"],self.ov_on)
                  }
             )
-        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
+        '''
+        dataset = az.InferenceData(posterior = xrdata)
         return dataset
     
     def single_chain_arvis_dataset(self,labels=["mu_off","mu_on"]):
@@ -226,11 +237,71 @@ class SignalAndNoise :
                 "draw":(["draw"],np.arange(self.samples)),
                 }
             )
+        '''
         xrobs = xr.Dataset(
             data_vars = {
                   labels[0]: (["data"],self.ov_off),
                   labels[1]: (["data"],self.ov_on)
                  }
             )
-        dataset = az.InferenceData(posterior = xrdata, observed_data = xrobs)
+        '''
+        dataset = az.InferenceData(posterior = xrdata)
         return dataset
+    
+    def diagnose(ds,bins):
+        
+        ess = az.ess(ds)
+        print("effective sample size:")
+        print(ess)
+
+
+        plt.hist(ess['mu_off'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_off')
+        plt.ylabel('Frequência')
+        plt.title('effective sample size mu_off')
+        plt.grid(True)
+        plt.show()
+        
+        plt.hist(ess['mu_on'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_on')
+        plt.ylabel('Frequência')
+        plt.title('effective sample size mu_on ')
+        plt.grid(True)
+        plt.show()
+
+        r_hat = az.rhat(ds)
+        print("r^:")
+        print(r_hat)
+
+        plt.hist(r_hat['mu_off'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_off')
+        plt.ylabel('Frequência')
+        plt.title('r^ mu_off')
+        plt.grid(True)
+        plt.show()
+
+        plt.hist(r_hat['mu_on'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_on')
+        plt.ylabel('Frequência')
+        plt.title('r^ mu_on')
+        plt.grid(True)
+        plt.show()
+
+        mcse = az.mcse(ds)
+        print("Markov Chain Standard Error statistic:")
+        print(mcse)
+
+        plt.hist(mcse['mu_off'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_off')
+        plt.ylabel('Frequência')
+        plt.title('Markov Chain Standard Error statistic mu_off')
+        plt.grid(True)
+        plt.show()
+
+        plt.hist(mcse['mu_on'],bins=bins, edgecolor='k')
+        plt.xlabel('mu_on')
+        plt.ylabel('Frequência')
+        plt.title('Markov Chain Standard Error statistic mu_on')
+        plt.grid(True)
+        plt.show()
+        

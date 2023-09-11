@@ -8,21 +8,21 @@ Created on Sun Aug 20 23:14:41 2023
 import matplotlib.pyplot as plt
 from Models import SignalAndNoise as SN
 import numpy as np
-import arviz as az
+import arviz as az 
 from scipy.stats import poisson
+import pandas as pd
 
 labels = ["mu_off","mu_on"]
 az.style.use("arviz-darkgrid")
 
 # %% Run Test 1
-"""Ideal Situation: Data from Poisson Sample; Flat Prior; 
-High iterarions numbers; High burn-in, High Data Number"""
+
 
 #Inputs
-samples = 5000
+samples = 500
 burn_in = 500
-nwalkers = 50
-n_chains= 5
+nwalkers = 100
+n_chains= 8
 
 #Data Draw
 data_off = poisson.rvs(mu=4,size = 100)
@@ -34,230 +34,455 @@ test1.run(samples=samples, burn_in= burn_in,n_chains = n_chains, nwalkers= nwalk
 
 # %% Analisys Test 1
 
-#Posterior from a single chain
-single_chain1 = test1.single_chain_arvis_dataset()
-az.plot_posterior(single_chain1)
+ds = test1.full_arviz_dataset()
+single_chain = test1.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
 
-#Trace from a single chains
-az.plot_trace(single_chain1)
+ess = az.ess(ds)
 
-#Autocorrelation from a single chain 
-for i in range(2):
-    axes = az.plot_autocorr(
-        single_chain1,
-        var_names=labels[i],
-        combined = True,
-        max_lag=200
-    )
-    fig = axes.get_figure()
-    fig.suptitle("Autocorrelation Single Chain 1", fontsize=20)
-    plt.show()
-    
-#Effective sample size plot for a single chain 
-az.plot_ess(single_chain1, kind="evolution")          
-            
-#R_hat from chains with diff seeds
-compare_chain = test1.diff_seed_arviz_dataset()
-r_hat = az.rhat(compare_chain)
-print("diff seeds R^:")
-print(r_hat)
+r_hat = az.rhat(ds)
 
-#Data Summaries from all chains and walkers
-full_dataset = test1.full_arviz_dataset()
-data_summary = az.summary(full_dataset, hdi_prob=0.95)
-print("geral data summary:")
-print(data_summary)
+mcse = az.mcse(ds)
+
+summary = {
+    'Stat': ['ess off','ess on','rhat off','rhat on', 'msce off', 'msce on'],
+    'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean()),float(mcse['mu_off'].mean()),float(mcse['mu_on'].mean())],
+    'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std()),float(mcse['mu_off'].std()),float(mcse['mu_on'].std())]
+}
+
+df = pd.DataFrame(summary).round(5)
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+tabela.auto_set_font_size(False)
+tabela.set_fontsize(12)
+tabela.scale(1.5, 1.5)
+plt.title("Test 1 - 500 Samples")
+plt.show()
+
+fig, axs = plt.subplots(nrows=2, ncols=3)
+
+axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[0, 0].set_title('effect sample size mu_off')
+
+axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[1, 0].set_title('effect sample size mu_on')
+
+
+axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[0, 1].set_title('r^ mu_off')
+
+axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[1, 1].set_title('r^ mu_on')
+
+axs[0, 2].hist(mcse['mu_off'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[0, 2].set_title('MC Std Error mu_off')
+
+axs[1, 2].hist(mcse['mu_on'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[1, 2].set_title('MC Std Error mu_on')
+
+plt.suptitle('Test 1 - 500 Samples', fontsize=18)
+plt.show()
 
 # %% Run Test 2
-"""Strong Prior: Gamma Prior(strong); few data; Large Simulation Numbers"""
+
 
 #Inputs
-samples2 = 3000
+samples2 = 1000
 burn_in2 = 500
-nwalkers2 = 40
-n_chains2= 5
+nwalkers2 = 100
+n_chains2= 8
 
 #Data Draw
-data_off2 = [2]
-data_on2 = [4]  
+data_off = poisson.rvs(mu=4,size = 100)
+data_on = poisson.rvs(mu=7,size = 100)
 
 #Run Chains
-test2 = SN.SignalAndNoise(data_off,data_on ,'gamma','gamma',
-                          mean_off=15, mean_on=18, std_off = 2, std_on=2)
+test2 = SN.SignalAndNoise(data_off,data_on ,'uniform','uniform')
+                          
 test2.run(samples=samples2, burn_in= burn_in2,n_chains = n_chains2, nwalkers= nwalkers2)
 
 # %% Analysis Test 2
 
-#Posterior from a single chain
-single_chain2 = test2.single_chain_arvis_dataset()
-az.plot_posterior(single_chain2)
+ds = test2.full_arviz_dataset()
+single_chain = test2.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
 
-#Trace from a single chains
-az.plot_trace(single_chain2)
+ess = az.ess(ds)
 
-#Autocorrelation from a single chain 
-for i in range(2):
-    axes = az.plot_autocorr(
-        single_chain2,
-        var_names=labels[i],
-        combined = True,
-        max_lag=200
-    )
-    fig = axes.get_figure()
-    fig.suptitle("Autocorrelation Single Chain 2", fontsize=20)
-    plt.show()
-    
-#R_hat from chains with diff seeds
-compare_chain2 = test2.diff_seed_arviz_dataset()
-r_hat = az.rhat(compare_chain2)
-print("diff seeds R^:")
-print(r_hat)
+r_hat = az.rhat(ds)
 
-#Data Summaries from all chains and walkers
-full_dataset2 = test2.full_arviz_dataset()
-data_summary2 = az.summary(full_dataset2,hdi_prob=0.95)
-print("geral data summary:")
-print(data_summary2)
+mcse = az.mcse(ds)
 
-# %% Run Test 3
-"""Model Conflict: Strong prior and lot of data, with conflicting statistics"""
+summary = {
+    'Stat': ['ess off','ess on','rhat off','rhat on', 'msce off', 'msce on'],
+    'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean()),float(mcse['mu_off'].mean()),float(mcse['mu_on'].mean())],
+    'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std()),float(mcse['mu_off'].std()),float(mcse['mu_on'].std())]
+}
+df = pd.DataFrame(summary).round(5)
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+tabela.auto_set_font_size(False)
+tabela.set_fontsize(12)
+tabela.scale(1.5, 1.5)
+plt.title("Test 2 - 1000 Samples")
+plt.show()
+
+fig, axs = plt.subplots(nrows=2, ncols=3)
+
+axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[0, 0].set_title('effect sample size mu_off')
+
+axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[1, 0].set_title('effect sample size mu_on')
+
+
+axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[0, 1].set_title('r^ mu_off')
+
+axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[1, 1].set_title('r^ mu_on')
+
+axs[0, 2].hist(mcse['mu_off'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[0, 2].set_title('MC Std Error mu_off')
+
+axs[1, 2].hist(mcse['mu_on'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[1, 2].set_title('MC Std Error mu_on')
+
+plt.suptitle('Test 2 - 1000 Samples', fontsize=18)
+plt.show()
+
+# %% Run Test 4
+
 
 #Inputs
 samples3 = 3000
 burn_in3 = 500
-nwalkers3 = 20
-n_chains3= 1
-
+nwalkers3 = 100
+n_chains3= 8
 #Data Draw
-data_off3 = poisson.rvs(mu=4,size = 500)
-data_on3 = poisson.rvs(mu=7,size = 500)  
+data_off3 = poisson.rvs(mu=4,size = 100)
+data_on3 = poisson.rvs(mu=7,size = 100)  
 
 #Run Chains
-test3 = SN.SignalAndNoise(data_off3,data_on3 ,'gamma','gamma',
-                          mean_off=15, mean_on=18, std_off = 2, std_on=2)
+test3 = SN.SignalAndNoise(data_off3,data_on3 ,'uniform','uniform')
+                          
 test3.run(samples=samples3, burn_in= burn_in3,n_chains = n_chains3, nwalkers= nwalkers3)
 
 
-# %% Analysis Test 3
+# %% Analysis Test 4
 
-#Posterior from a single chain
-single_chain3 = test3.single_chain_arvis_dataset()
-az.plot_posterior(single_chain3)
+ds = test3.full_arviz_dataset()
+single_chain = test3.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
 
-#Trace from a single chains
-az.plot_trace(single_chain3)
+ess = az.ess(ds)
 
-#Autocorrelation from a single chain 
-for i in range(2):
-    axes = az.plot_autocorr(
-        single_chain3,
-        var_names=labels[i],
-        combined = True,
-        max_lag=200
-    )
-    fig = axes.get_figure()
-    fig.suptitle("Autocorrelation Single Chain 3", fontsize=20)
-    plt.show()
+r_hat = az.rhat(ds)
 
-#Data Summaries from a single chain
-data_summary3 = az.summary(single_chain3,hdi_prob=0.95)
-print("geral data summary:")
-print(data_summary3)
+mcse = az.mcse(ds)
 
-sample_size3 = az.ess(single_chain3)
-print("total eff sample size:")
-print(sample_size3)
+summary = {
+    'Stat': ['ess off','ess on','rhat off','rhat on', 'msce off', 'msce on'],
+    'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean()),float(mcse['mu_off'].mean()),float(mcse['mu_on'].mean())],
+    'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std()),float(mcse['mu_off'].std()),float(mcse['mu_on'].std())]
+}
+df = pd.DataFrame(summary).round(5)
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+tabela.auto_set_font_size(False)
+tabela.set_fontsize(12)
+tabela.scale(1.5, 1.5)
+plt.title("Test 4 - 3000 Samples")
+plt.show()
 
-# %% Run Test 4
-"""Less Info: more data_off than data_on; flat prior"""
+fig, axs = plt.subplots(nrows=2, ncols=3)
+
+axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[0, 0].set_title('effect sample size mu_off')
+
+axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[1, 0].set_title('effect sample size mu_on')
+
+
+axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[0, 1].set_title('r^ mu_off')
+
+axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[1, 1].set_title('r^ mu_on')
+
+axs[0, 2].hist(mcse['mu_off'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[0, 2].set_title('MC Std Error mu_off')
+
+axs[1, 2].hist(mcse['mu_on'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[1, 2].set_title('MC Std Error mu_on')
+
+plt.suptitle('Test 4 - 3000 Samples', fontsize=18)
+plt.show()
+
+# %% Run Test 3
+
 
 #Inputs
 samples4 = 2000
 burn_in4 = 500
-nwalkers4 = 20
-n_chains4= 3
+nwalkers4 = 100
+n_chains4= 8
 
 #Data Draw
-data_off4 = poisson.rvs(mu=4,size = 500)
-data_on4 = poisson.rvs(mu=7,size = 10)  
+data_off4 = poisson.rvs(mu=4,size = 100)
+data_on4 = poisson.rvs(mu=7,size = 100)  
 
 #Run Chains
-test4 = SN.SignalAndNoise(data_off4,data_on4 ,'jeffrey','jeffrey')
+test4 = SN.SignalAndNoise(data_off4,data_on4 ,'uniform','uniform')
 test4.run(samples=samples4, burn_in= burn_in4,n_chains = n_chains4, nwalkers= nwalkers4)
 
-#%% Analysis Test 4
+#%% Analysis Test 3
 
-#Posterior from a single chain
-single_chain4 = test4.single_chain_arvis_dataset()
-az.plot_posterior(single_chain4)
+ds = test4.full_arviz_dataset()
+single_chain = test4.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
 
-#Trace from a single chains
-az.plot_trace(single_chain4)
+ess = az.ess(ds)
 
-#Autocorrelation from a single chain 
-for i in range(2):
-    axes = az.plot_autocorr(
-        single_chain4,
-        var_names=labels[i],
-        combined = True,
-        max_lag=200
-    )
-    fig = axes.get_figure()
-    fig.suptitle("Autocorrelation Single Chain 4", fontsize=20)
-    plt.show()
+r_hat = az.rhat(ds)
 
-#Data Summaries from a single chain
-data_summary4 = az.summary(single_chain4,hdi_prob=0.95)
-print("geral data summary:")
-print(data_summary4)
+mcse = az.mcse(ds)
 
-sample_size4 = az.ess(single_chain4)
-print("total eff sample size:")
-print(sample_size4)
+summary = {
+    'Stat': ['ess off','ess on','rhat off','rhat on', 'msce off', 'msce on'],
+    'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean()),float(mcse['mu_off'].mean()),float(mcse['mu_on'].mean())],
+    'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std()),float(mcse['mu_off'].std()),float(mcse['mu_on'].std())]
+}
+df = pd.DataFrame(summary).round(5)
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+tabela.auto_set_font_size(False)
+tabela.set_fontsize(12)
+tabela.scale(1.5, 1.5)
+plt.title("Test 3 - 2000 Samples")
+plt.show()
+
+fig, axs = plt.subplots(nrows=2, ncols=3)
+
+axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[0, 0].set_title('effect sample size mu_off')
+
+axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[1, 0].set_title('effect sample size mu_on')
+
+
+axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[0, 1].set_title('r^ mu_off')
+
+axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[1, 1].set_title('r^ mu_on')
+
+axs[0, 2].hist(mcse['mu_off'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[0, 2].set_title('MC Std Error mu_off')
+
+axs[1, 2].hist(mcse['mu_on'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[1, 2].set_title('MC Std Error mu_on')
+
+plt.suptitle('Test 3 - 2000 Samples', fontsize=18)
+plt.show()
 
 
 # %% Run Test 5 
 """Data Conflict: data_off> data_on; flat prior"""
 
 #Inputs
-samples5 = 2000
+samples5 = 4000
 burn_in5 = 500
-nwalkers5 = 20
-n_chains5= 3
+nwalkers5 = 100
+n_chains5= 8
 
 #Data Draw
-data_off5 = poisson.rvs(mu=8,size = 50)
-data_on5 = poisson.rvs(mu=2,size = 50)  
+data_off5 = poisson.rvs(mu=4,size = 100)
+data_on5 = poisson.rvs(mu=7,size = 100)  
 
 #Run Chains
-test5 = SN.SignalAndNoise(data_off5,data_on5 ,'jeffrey','jeffrey')
+test5 = SN.SignalAndNoise(data_off5,data_on5 ,'uniform','uniform')
 test5.run(samples=samples5, burn_in= burn_in5,n_chains = n_chains5, nwalkers= nwalkers5)
 
 # %% Analysis Test 5
 
-#Posterior from a single chain
-single_chain5 = test5.single_chain_arvis_dataset()
-az.plot_posterior(single_chain5)
+ds = test5.full_arviz_dataset()
+single_chain = test5.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
 
-#Trace from a single chains
-az.plot_trace(single_chain5)
+ess = az.ess(ds)
 
-#Autocorrelation from a single chain 
-for i in range(2):
-    axes = az.plot_autocorr(
-        single_chain5,
-        var_names=labels[i],
-        combined = True,
-        max_lag=200
-    )
-    fig = axes.get_figure()
-    fig.suptitle("Autocorrelation Single Chain 5", fontsize=20)
-    plt.show()
+r_hat = az.rhat(ds)
 
-#Data Summaries from a single chain
-data_summary5 = az.summary(single_chain5,hdi_prob=0.95)
-print("geral data summary:")
-print(data_summary5)
+mcse = az.mcse(ds)
+
+summary = {
+    'Stat': ['ess off','ess on','rhat off','rhat on', 'msce off', 'msce on'],
+    'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean()),float(mcse['mu_off'].mean()),float(mcse['mu_on'].mean())],
+    'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std()),float(mcse['mu_off'].std()),float(mcse['mu_on'].std())]
+}
+df = pd.DataFrame(summary).round(5)
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.axis('tight')
+ax.axis('off')
+tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+tabela.auto_set_font_size(False)
+tabela.set_fontsize(12)
+tabela.scale(1.5, 1.5)
+plt.title("Test 5 - 4000 Samples")
+plt.show()
+
+fig, axs = plt.subplots(nrows=2, ncols=3)
+
+axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[0, 0].set_title('effect sample size mu_off')
+
+axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+               alpha=0.75)
+axs[1, 0].set_title('effect sample size mu_on')
+
+
+axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[0, 1].set_title('r^ mu_off')
+
+axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+               alpha=0.75)
+axs[1, 1].set_title('r^ mu_on')
+
+axs[0, 2].hist(mcse['mu_off'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[0, 2].set_title('MC Std Error mu_off')
+
+axs[1, 2].hist(mcse['mu_on'], bins=bins, histtype='stepfilled', facecolor='r',
+               alpha=0.75)
+axs[1, 2].set_title('MC Std Error mu_on')
+
+plt.suptitle('Test 5 - 4000 Samples', fontsize=18)
+plt.show()
+
+
+#%% Run Test 6 
+'''Few burn_in'''
+#Inputs
+samples6 = 2000
+burn_in6 = 100
+nwalkers6 = 100
+n_chains6= 8
+
+#Data Draw
+data_off6 = poisson.rvs(mu=6,size = 50)
+data_on6 = poisson.rvs(mu=8,size = 50)  
+
+#Run Chains
+test6 = SN.SignalAndNoise(data_off6,data_on6 ,'uniform','uniform')
+test6.run(samples=samples6, burn_in= burn_in6,n_chains = n_chains6, nwalkers= nwalkers6)
+
+#%% Analysis Test 6
+
+ds = test6.full_arviz_dataset()
+single_chain = test6.single_chain_arvis_dataset()
+az.plot_trace(single_chain)
+plt.show()
+bins = 15
+
+ess = az.ess(ds)
+print("effective sample size:")
+print(ess)
+
+
+plt.hist(ess['mu_off'],bins=bins, edgecolor='k')
+plt.xlabel('mu_off')
+plt.ylabel('Frequência')
+plt.title('effective sample size mu_off')
+plt.grid(True)
+plt.show()
+
+plt.hist(ess['mu_on'],bins=bins, edgecolor='k')
+plt.xlabel('mu_on')
+plt.ylabel('Frequência')
+plt.title('effective sample size mu_on ')
+plt.grid(True)
+plt.show()
+
+r_hat = az.rhat(ds)
+print("r^:")
+print(r_hat)
+
+plt.hist(r_hat['mu_off'],bins=bins, edgecolor='k')
+plt.xlabel('mu_off')
+plt.ylabel('Frequência')
+plt.title('r^ mu_off')
+plt.grid(True)
+plt.show()
+
+plt.hist(r_hat['mu_on'],bins=bins, edgecolor='k')
+plt.xlabel('mu_on')
+plt.ylabel('Frequência')
+plt.title('r^ mu_on')
+plt.grid(True)
+plt.show()
+
+mcse = az.mcse(ds)
+print("Markov Chain Standard Error statistic:")
+print(mcse)
+
+plt.hist(mcse['mu_off'],bins=bins, edgecolor='k')
+plt.xlabel('mu_off')
+plt.ylabel('Frequência')
+plt.title('Markov Chain Standard Error statistic mu_off')
+plt.grid(True)
+plt.show()
+
+plt.hist(mcse['mu_on'],bins=bins, edgecolor='k')
+plt.xlabel('mu_on')
+plt.ylabel('Frequência')
+plt.title('Markov Chain Standard Error statistic mu_on')
+plt.grid(True)
+plt.show()
 
 #%% Random Test Analysis
 '''Inputs'''
