@@ -9,6 +9,8 @@ import emcee
 import arviz as az
 import xarray as xr
 import matplotlib.pyplot as plt
+import pandas as pd
+from scipy.stats import poisson
 
 class SignalAndNoise :
     """This class represent signal(on) and noise(off) parameter poissonian inference model for 
@@ -94,7 +96,21 @@ class SignalAndNoise :
             self.factorial = np.array(self.factorial)
             return -len(self.data)*self.mu_sum + np.sum(self.data)*np.log(self.mu_sum) + np.sum(self.factorial)
         else: 
-            return - math.inf        
+            return - math.inf   
+    
+    '''predictive'''
+    
+    def predictive_off(self, mu):
+        if mu[0] > 0:
+            return poisson.rvs(mu= mu[0],size = 1)
+        else:
+            return -1
+        
+    def predictive_on(self, mu):
+        if mu[1] > 0:
+            return poisson.rvs(mu= mu[1],size = 1)
+        else:
+            return -1
         
     def __init__(self, observed_value_off, observed_value_on, prior_off='uniform',
                  prior_on = 'uniform', mean_off=1, mean_on=1, std_off = 1, std_on=1):
@@ -131,15 +147,25 @@ class SignalAndNoise :
         self.beta_off = mean_off/std_off**2
         
     def log_posterior(self, mu):
+        
+        """log prob"""
         self.lp_on = self.log_prior_on(mu = mu,alpha = self.alpha_on, beta = self.beta_on)
         self.lp_off = self.log_prior_off(mu = mu,alpha = self.alpha_off, beta = self.beta_off)
         self.ll_on = self.log_like_off(mu = mu,data = self.ov_off)
         self.ll_off = self.log_like_on(mu = mu,data = self.ov_on)
-            
-        return self.lp_on + self.lp_off + self.ll_on + self.ll_off 
+        
+        self.log_post = self.lp_on + self.lp_off + self.ll_on + self.ll_off
+        
+        """blobs"""
+    
+        self.fake_dist_off = self.predictive_off(mu = mu)
+        self.fake_dist_on = self.predictive_on(mu = mu)
+        
+        return self.log_post, self.fake_dist_off, self.fake_dist_on
             
     def run (self, samples = 10000, burn_in = 1000, n_chains = 8, nwalkers = 100 ):
         self.samples_list = []
+        self.samples_list_flatten = []
        
         
         # stats of a gamma sampler for p0
@@ -157,19 +183,23 @@ class SignalAndNoise :
         for i in range(n_chains):
             print("Running chain n.",i)
             np.random.seed(42 + 7*i) #nenhuma razão, poderia ser qualquer o numero 
-        
-            self.sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.log_posterior)
+            
+            dtype = [("pred_off", int), ("pred_on", int)]
+            
+            self.sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.log_posterior, blobs_dtype=dtype)
             print("Burn_in progress:")
             self.state = self.sampler.run_mcmc(self.p0, burn_in, progress=(True)) #burn in 
             self.sampler.reset()
             print("Chain progress:")    
             self.sampler.run_mcmc(self.state, samples,progress=(True)) #real chain
             self.samples_list.append(self.sampler.get_chain(flat=False))
+            self.samples_list_flatten.append(self.sampler.get_chain(flat=True))
             
         self.n_chains = n_chains
         self.nwalkers = nwalkers
         self.samples = samples
         self.chains = np.array(self.samples_list)
+        self.chains_flatten = np.array(self.samples_list_flatten)
         
         return self.chains
     
@@ -248,60 +278,125 @@ class SignalAndNoise :
         dataset = az.InferenceData(posterior = xrdata)
         return dataset
     
-    def diagnose(ds,bins):
+    def diagnose(self, ds, single_chain,bins=20, title= ""):
+        
+        az.plot_trace(single_chain)
+        plt.show()
+        
+        az.plot_autocorr(single_chain,max_lag=200, combined=True)
+        plt.show()
         
         ess = az.ess(ds)
-        print("effective sample size:")
-        print(ess)
+        r_hat = az.rhat(ds)
 
+        summary = {
+            'Stat': ['ess off','ess on','rhat off','rhat on'],
+            'Mean': [float(ess['mu_off'].mean()),float(ess['mu_on'].mean()),float(r_hat['mu_off'].mean()),float(r_hat['mu_on'].mean())],
+            'Std': [float(ess['mu_off'].std()),float(ess['mu_on'].std()),float(r_hat['mu_off'].std()),float(r_hat['mu_on'].std())]
+        }
 
-        plt.hist(ess['mu_off'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_off')
-        plt.ylabel('Frequência')
-        plt.title('effective sample size mu_off')
-        plt.grid(True)
+        df = pd.DataFrame(summary).round(5)
+        fig, ax = plt.subplots(figsize=(8, 3))
+        ax.axis('tight')
+        ax.axis('off')
+        tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+        tabela.auto_set_font_size(False)
+        tabela.set_fontsize(12)
+        tabela.scale(1.5, 1.5)
+        plt.title(title)
+        plt.show()
+
+        fig, axs = plt.subplots(nrows=2, ncols=2)
+
+        axs[0, 0].hist(ess['mu_off'], bins = bins, histtype='stepfilled', facecolor='g',
+                       alpha=0.75)
+        axs[0, 0].set_title('effect sample size mu_off')
+        axs[0, 0].set_xlabel("n eff sample size")
+        axs[0, 0].set_ylabel("frequence")
+
+        axs[1, 0].hist(ess['mu_on'], bins = bins, histtype='stepfilled', facecolor='g',
+                       alpha=0.75)
+        axs[1, 0].set_title('effect sample size mu_on')
+        axs[1, 0].set_xlabel("n eff sample size")
+        axs[1, 0].set_ylabel("frequence")
+
+        axs[0, 1].hist(r_hat['mu_off'], bins=bins, histtype='stepfilled', facecolor='b',
+                       alpha=0.75)
+        axs[0, 1].set_title('r^ mu_off')
+        axs[0, 1].set_xlabel("r^")
+        axs[0, 1].set_ylabel("frequence")
+
+        axs[1, 1].hist(r_hat['mu_on'], bins=bins, histtype='stepfilled', facecolor='b',
+                       alpha=0.75)
+        axs[1, 1].set_title('r^ mu_on')
+        axs[1, 1].set_xlabel("r^")
+        axs[1, 1].set_ylabel("frequence")
+        
+        plt.suptitle(title, fontsize=18)
         plt.show()
         
-        plt.hist(ess['mu_on'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_on')
-        plt.ylabel('Frequência')
-        plt.title('effective sample size mu_on ')
-        plt.grid(True)
+        
+    def statistic_error(self):
+        """desvio da média"""
+        #média entre as cadeias de seed diferente 
+        mu_off_mean = np.mean(self.chains_flatten[:,:,0], axis = 1)
+        mu_on_mean = np.mean(self.chains_flatten[:,:,1], axis = 1)
+        
+        #cria um array com os valores repetidos da média
+        mu_off_mean_total = np.full(len(mu_off_mean),np.mean(mu_off_mean),dtype=float)
+        mu_on_mean_total = np.full(len(mu_on_mean),np.mean(mu_on_mean),dtype=float)
+
+        # variancia da média
+        error_mean_off = np.sum(np.square(mu_off_mean - mu_off_mean_total))/(self.n_chains-1)
+        error_mean_on = np.sum( np.square(mu_on_mean - mu_on_mean_total))/(self.n_chains-1)
+        
+        #desvio padrão da média
+        desv_mean_off = math.sqrt(error_mean_off)
+        desv_mean_on = math.sqrt(error_mean_on)
+        
+        """desvio da variancia"""
+        
+        #variancia entre as cadeias de seed diferente 
+        mu_off_var = np.var(self.chains_flatten[:,:,0], axis = 1)
+        mu_on_var = np.var(self.chains_flatten[:,:,1], axis = 1)
+        
+        #cria um array com os valores repetidos da média
+        mu_off_var_total = np.full(len(mu_off_var),np.mean(mu_off_var),dtype=float)
+        mu_on_var_total = np.full(len(mu_on_var),np.mean(mu_on_var),dtype=float)
+
+        # variancia da média
+        error_var_off = np.sum(np.square(mu_off_var - mu_off_var_total))/(self.n_chains-1)
+        error_var_on = np.sum( np.square(mu_on_var - mu_on_var_total))/(self.n_chains-1)
+        
+        #desvio padrão da média
+        desv_var_off = math.sqrt(error_var_off)
+        desv_var_on = math.sqrt(error_var_on)
+        
+        summary = {
+            'Desv': ['desv mean off','desv mean on','desv var off','desv var off'],
+            'Value': [desv_mean_off,desv_mean_on,desv_var_off,desv_var_off]
+        }
+
+        df_desv = pd.DataFrame(summary)
+        print(df_desv)
+        
+        return desv_mean_off, desv_mean_on, desv_var_off, desv_var_on, df_desv
+    
+    
+    def preditive_distribution(self):
+        self.flat_blobs = self.sampler.get_blobs(flat=True)
+        self.flat_preditive_off = self.flat_blobs["pred_off"]
+        self.flat_preditive_on = self.flat_blobs["pred_on"]
+        
+        
+        plt.hist(self.flat_preditive_off,bins = np.arange(0,15), density=True)
+        plt.title("Mu_off posterior predictive distribuion")
         plt.show()
-
-        r_hat = az.rhat(ds)
-        print("r^:")
-        print(r_hat)
-
-        plt.hist(r_hat['mu_off'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_off')
-        plt.ylabel('Frequência')
-        plt.title('r^ mu_off')
-        plt.grid(True)
+        
+        plt.hist(self.flat_preditive_on, bins = np.arange(0,15), density=True)
+        plt.title("Mu_on posterior predictive distribuion")
         plt.show()
-
-        plt.hist(r_hat['mu_on'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_on')
-        plt.ylabel('Frequência')
-        plt.title('r^ mu_on')
-        plt.grid(True)
-        plt.show()
-
-        mcse = az.mcse(ds)
-        print("Markov Chain Standard Error statistic:")
-        print(mcse)
-
-        plt.hist(mcse['mu_off'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_off')
-        plt.ylabel('Frequência')
-        plt.title('Markov Chain Standard Error statistic mu_off')
-        plt.grid(True)
-        plt.show()
-
-        plt.hist(mcse['mu_on'],bins=bins, edgecolor='k')
-        plt.xlabel('mu_on')
-        plt.ylabel('Frequência')
-        plt.title('Markov Chain Standard Error statistic mu_on')
-        plt.grid(True)
-        plt.show()
+        
+        
+        return self.flat_preditive_off, self.flat_preditive_on
         
