@@ -6,6 +6,7 @@ import sys
 import matplotlib.pyplot as plt
 from scipy.stats import poisson
 import numpy as np
+import pandas as pd
 
 from Models import BasicPoisson as BP
 
@@ -67,8 +68,8 @@ def main():
 
     #gráfico
     plt.plot(x, y)
-    plt.title("Posterior Parameter Distribution")
-    plt.xlabel("mu")
+    plt.title("Distribuição a Posteriori do Parâmetro")
+    plt.xlabel(r'$\mu$')
     plt.ylabel("p.d.f.")
    # plt.axvline(x = up1, color = 'r', label = 'Upper limit')
    # plt.axvline(x = up2, color = 'g', label = 'Symmetrical')
@@ -79,20 +80,29 @@ def main():
     plt.show()  
 
     #tabela de dados
-    model.data_summarry()
+    df = model.data_summarry()
+    fig, ax = plt.subplots(figsize=(6, 2))
+    ax.axis('tight')
+    ax.axis('off')
+    tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+    tabela.auto_set_font_size(False)
+    tabela.set_fontsize(12)
+    tabela.scale(1.5, 1.5)
+    plt.title("Medidas Resumo da Distribuição a Posteriori")
+    plt.show()
     
     #posterior prediction
     plt.style.use('seaborn-whitegrid')
     
     #Verification Data
-    plt.hist(ov,bins=np.arange(max(verify)+1), density = True, facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Observed Data')
+    plt.hist(ov,bins=np.arange(max(verify)+1), density = True, facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Dados Observados')
     
     postx, posty, p_value = model.predictive_posterior_run()
-    plt.scatter(postx,posty,color='r', label = 'Post. Pred. Dist.')
+    plt.scatter(postx,posty,color='r', label = 'Predição da Inferência')
    
-    plt.title("Posterior Predictive Distribution")
+    plt.title("Distribuição a Posteriori Preditva")
     plt.ylabel("p.d.f.")
-    plt.xlabel('Data')
+    plt.xlabel('Dados')
     plt.legend()
     plt.show()
     
@@ -101,6 +111,7 @@ def main():
     print(f'the observed data is:{ov}')
     print(f'the p-value list is:{p_value}')
     
-    
+    mle = model.aic()
+    print(mle)
 if __name__ == "__main__":
     main()
