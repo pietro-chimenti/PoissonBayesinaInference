@@ -117,6 +117,29 @@ class Signal_and_Hierachical_Noise:
         else:
             return -math.inf
         
+    '''PREDICTIVE'''
+    
+    def predictive_off(self, param, data_off):
+        
+        self.noise_off = param[3: 3 + len(data_off)]
+        noise_off_array = np.array(self.noise_off)
+        
+        if np.all(noise_off_array > 0):
+            return poisson.rvs(mu = noise_off_array) #gera valores aleatórios de poisson
+        else:
+            return np.full(len(noise_off_array),-2) #retorna um array de valor não importante, uma vez que será descartado na seleção da cadeia
+      
+    def predictive_on(self, param, data_off):
+        
+        self.signal = param[0]
+        self.noise_on = param[len(data_off)+3:]
+        noise_on_array = np.array(self.noise_on)
+        
+        if np.all(noise_on_array > 0) and self.signal > 0:
+            return poisson.rvs(mu= (np.repeat(self.signal, len(noise_on_array)) + noise_on_array)) #gera valores aleatórios de poisson
+        else:
+            return np.full(len(noise_on_array),-2)  #retorna um array de valor não importante, uma vez que será descartado na seleção da cadeia
+
     '''POSTERIOR'''
         
     def log_posterior(self, param):
@@ -132,8 +155,14 @@ class Signal_and_Hierachical_Noise:
         
         self.log_post = self.lp_signal + self.lp_mu + self.lp_sigma + self.lpopulation + self.ll_on + self.ll_off
         
-        return self.log_post
-       
+        """blobs"""
+        # Amostra Preditiva
+        self.pred_dist_off = self.predictive_off(param = param,data_off = self.observed_value_off)
+        self.pred_dist_on = self.predictive_on(param = param,data_off = self.observed_value_off)
+        
+        
+        return self.log_post, self.pred_dist_off, self.pred_dist_on
+    
             
     '''CONSTRUCTOR'''
          
@@ -212,15 +241,21 @@ class Signal_and_Hierachical_Noise:
         self.sampler = emcee.backends.HDFBackend(filename)
         
     def get_chain(self, burn_in):
+        
+        #get the chains
         self.burn_in = burn_in
         self.chains = self.sampler.get_chain(discard=burn_in)
         self.chains_flat= self.sampler.get_chain(flat=True, discard=burn_in)
         self.chains_flat_no_discard = self.sampler.get_chain(flat=True)
-
+        
+        #get pred simulation
+        self.blobs_list = self.sampler.get_blobs(flat=True, discard=burn_in)
+        
+        #arviz data
         dataset = az.from_emcee(self.sampler, var_names=self.label_total)
         self.dataset = dataset.sel(draw=slice(self.burn_in, None),inplacebool= True)
         
-        return self.chains_flat, self.chains, self.chains_flat_no_discard, self.dataset
+        return self.chains_flat, self.chains, self.chains_flat_no_discard, self.dataset, self.blobs_list
     
 
     '''SIMULATION DIAGNOSE'''
@@ -308,6 +343,38 @@ class Signal_and_Hierachical_Noise:
 
         fig.suptitle('Distribuição a Posteriori dos parametros de ruido', fontsize=16)
         plt.tight_layout()
+        plt.show()
+        
+        
+    def pred_graph(self):
+        
+        pred_flat_off = np.concatenate(self.blobs_list[:,0])
+        pred_flat_on= np.concatenate(self.blobs_list[:,1])
+
+        counts, bins = np.histogram(pred_flat_off, bins=100)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color='tomato', edgecolor='black', alpha=0.7, histtype='stepfilled',label='preditiva')
+        
+        counts, bins = np.histogram(self.observed_value_off, bins=20)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color="k", histtype="stepfilled", 
+         label="dados",alpha=0.5)
+
+        plt.title(" Distribuição Preditiva OFF")
+        plt.legend()
+        plt.show()
+
+        counts, bins = np.histogram(pred_flat_on, bins=100)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color='skyblue', edgecolor='black', alpha=0.7, histtype='stepfilled',label='preditiva')
+        
+        counts, bins = np.histogram(self.observed_value_on, bins=20)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color="k", histtype="stepfilled", 
+         label="dados",alpha=0.5)
+        
+        plt.title(" Distribuição Preditiva ON")
+        plt.legend()
         plt.show()
         
         
