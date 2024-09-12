@@ -116,29 +116,7 @@ class Signal_and_Hierachical_Noise:
             return np.sum(like_on_list)
         else:
             return -math.inf
-        
-    '''PREDICTIVE'''
-    
-    def predictive_off(self, param, data_off):
-        
-        self.noise_off = param[3: 3 + len(data_off)]
-        noise_off_array = np.array(self.noise_off)
-        
-        if np.all(noise_off_array > 0):
-            return poisson.rvs(mu = noise_off_array) #gera valores aleatórios de poisson
-        else:
-            return np.full(len(noise_off_array),-2) #retorna um array de valor não importante, uma vez que será descartado na seleção da cadeia
-      
-    def predictive_on(self, param, data_off):
-        
-        self.signal = param[0]
-        self.noise_on = param[len(data_off)+3:]
-        noise_on_array = np.array(self.noise_on)
-        
-        if np.all(noise_on_array > 0) and self.signal > 0:
-            return poisson.rvs(mu= (np.repeat(self.signal, len(noise_on_array)) + noise_on_array)) #gera valores aleatórios de poisson
-        else:
-            return np.full(len(noise_on_array),-2)  #retorna um array de valor não importante, uma vez que será descartado na seleção da cadeia
+
 
     '''POSTERIOR'''
         
@@ -155,13 +133,9 @@ class Signal_and_Hierachical_Noise:
         
         self.log_post = self.lp_signal + self.lp_mu + self.lp_sigma + self.lpopulation + self.ll_on + self.ll_off
         
-        """blobs"""
-        # Amostra Preditiva
-        self.pred_dist_off = self.predictive_off(param = param,data_off = self.observed_value_off)
-        self.pred_dist_on = self.predictive_on(param = param,data_off = self.observed_value_off)
         
         
-        return self.log_post, self.pred_dist_off, self.pred_dist_on
+        return self.log_post
     
             
     '''CONSTRUCTOR'''
@@ -248,12 +222,22 @@ class Signal_and_Hierachical_Noise:
         self.chains_flat= self.sampler.get_chain(flat=True, discard=burn_in)
         self.chains_flat_no_discard = self.sampler.get_chain(flat=True)
         
-        #get pred simulation
-        self.blobs_list = self.sampler.get_blobs(flat=True, discard=burn_in)
-        
         #arviz data
         dataset = az.from_emcee(self.sampler, var_names=self.label_total)
         self.dataset = dataset.sel(draw=slice(self.burn_in, None),inplacebool= True)
+        
+        #preditive
+        mu_signal  = self.chains_flat[:, 0]
+        mu_noise = self.chains_flat[:, 1]
+        desv_noise = self.chains_flat[:, 2]
+        
+        alpha = mu_noise**2/desv_noise**2
+        beta = mu_noise/desv_noise**2
+        noise_param_off = gamma.rvs(alpha, scale = 1/beta)
+        
+        
+        self.pred_off = poisson.rvs(mu = noise_param_off)
+        self.pred_on = poisson.rvs(mu = noise_param_off + mu_signal)
         
         return self.chains_flat, self.chains, self.chains_flat_no_discard, self.dataset, self.blobs_list
     
@@ -344,14 +328,12 @@ class Signal_and_Hierachical_Noise:
         fig.suptitle('Distribuição a Posteriori dos parametros de ruido', fontsize=16)
         plt.tight_layout()
         plt.show()
-        
-        
+
+
     def pred_graph(self):
         
-        pred_flat_off = np.concatenate(self.blobs_list[:,0])
-        pred_flat_on= np.concatenate(self.blobs_list[:,1])
 
-        counts, bins = np.histogram(pred_flat_off, bins=100)
+        counts, bins = np.histogram(self.pred_off, bins=100)
         weights = counts / np.max(counts)
         plt.hist(bins[:-1], bins, weights=weights,color='tomato', edgecolor='black', alpha=0.7, histtype='stepfilled',label='preditiva')
         
@@ -364,7 +346,7 @@ class Signal_and_Hierachical_Noise:
         plt.legend()
         plt.show()
 
-        counts, bins = np.histogram(pred_flat_on, bins=100)
+        counts, bins = np.histogram(self.pred_on, bins=100)
         weights = counts / np.max(counts)
         plt.hist(bins[:-1], bins, weights=weights,color='skyblue', edgecolor='black', alpha=0.7, histtype='stepfilled',label='preditiva')
         
@@ -376,7 +358,7 @@ class Signal_and_Hierachical_Noise:
         plt.title(" Distribuição Preditiva ON")
         plt.legend()
         plt.show()
-        
+
         
     '''CORNER TOOLS'''
     

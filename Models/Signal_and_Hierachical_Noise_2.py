@@ -15,6 +15,7 @@ import emcee
 import corner 
 import arviz as az
 import h5py
+from numba import jit 
 
 class Signal_and_Hierachical_Noise_2:
     
@@ -70,6 +71,7 @@ class Signal_and_Hierachical_Noise_2:
         
     '''POPULATION'''
     
+    
     def log_population_noise(self,param):
         self.noise = param[4:]
         self.mu_noise = param[1]
@@ -90,6 +92,7 @@ class Signal_and_Hierachical_Noise_2:
     
     '''LIKELYHOOD'''
     
+    
     def log_like_off(self, param, data_off):
         
         self.noise_off = param[4: 4 + len(data_off)]
@@ -105,7 +108,7 @@ class Signal_and_Hierachical_Noise_2:
         else:
             return -math.inf
         
-        
+    
     def log_like_on(self, param, data_off, data_on):#depende de data off só para seleção dos parametros
             
         self.signal = param[0]
@@ -121,7 +124,6 @@ class Signal_and_Hierachical_Noise_2:
             return np.sum(like_on_list)
         else:
             return -math.inf
-        
         
     def log_like_noise(self, param, data_noise):
         self.alpha_noise = param[3]
@@ -139,7 +141,8 @@ class Signal_and_Hierachical_Noise_2:
             return -math.inf
         
     '''POSTERIOR'''
-        
+    
+   
     def log_posterior(self, param):
             
         """log prob"""
@@ -170,7 +173,7 @@ class Signal_and_Hierachical_Noise_2:
         
         
         #nome dos parametros:
-        self.label_interest = [r'$\mu_{signal}$', r'$\mu_{noise}$', r'$\sigma_{noise}$',r'$\alpha_{noise}$']
+        self.label_interest = [r'$S$', r'$\mu_{noise}$', r'$\sigma_{noise}$',r'$\alpha_{cut}$']
         self.label_noise = []
         for i in range(self.n_dim_noise):
             stg = f'$R_{{i}}$'
@@ -197,6 +200,7 @@ class Signal_and_Hierachical_Noise_2:
              
     '''RUN CHAIN'''
     
+    
     def run (self, save = False, filename=''):
         np.random.seed(42)
         self.matrix_p0 = np.empty((0,self.ndim))
@@ -206,6 +210,7 @@ class Signal_and_Hierachical_Noise_2:
         m_on, dp_on = np.mean(self.ov_on), np.std(self.ov_on)
         m_noise, dp_noise = np.mean(self.ov_noise), np.std(self.ov_noise)
         data_total = np.concatenate((self.ov_off,self.ov_on))
+        
         
         for i in np.arange(self.nwalkers):
             p0_signal = np.random.gamma(m_on**2/dp_on**2,scale=dp_on**2/m_on)
@@ -244,8 +249,25 @@ class Signal_and_Hierachical_Noise_2:
         self.chains_flat= self.sampler.get_chain(flat=True, discard=burn_in)
         self.chains_flat_no_discard = self.sampler.get_chain(flat=True)
         
+        #arviz data
         dataset = az.from_emcee(self.sampler, var_names=self.label_total)
         self.dataset = dataset.sel(draw=slice(self.burn_in, None),inplacebool= True)
+        
+        
+        #preditive
+        mu_signal  = self.chains_flat[:, 0]
+        mu_noise = self.chains_flat[:, 1]
+        desv_noise = self.chains_flat[:, 2]
+        alpha_cut = self.chains_flat[:,3]
+        
+        alpha = mu_noise**2/desv_noise**2
+        beta = mu_noise/desv_noise**2
+        noise_param_off = gamma.rvs(alpha, scale = 1/beta)
+        
+        
+        self.pred_off = poisson.rvs(mu = noise_param_off)
+        self.pred_on = poisson.rvs(mu = noise_param_off + mu_signal)
+        self.pred_cut = poisson.rvs(mu = noise_param_off*alpha_cut)
         
         return self.chains_flat, self.chains, self.chains_flat_no_discard, self.dataset
     
@@ -273,37 +295,45 @@ class Signal_and_Hierachical_Noise_2:
     
     '''BASIC GRAPHICS'''    
     
-    def trace_plot(self):
-        
-        fig, axes = plt.subplots(4, figsize=(10, 7), sharex=True)
+    def trace_plot(self, noise_axes=10):
+        az.style.use(["arviz-darkgrid", "arviz-cyanish"])
+        fig, axes = plt.subplots(4, figsize=(10, 6), sharex=True)
         for i in range(4):
             ax = axes[i]
-            ax.plot(self.chains_flat_no_discard[:, i], "k", alpha=0.5)
+            ax.plot(self.chains_flat_no_discard[:, i], 'k')
             ax.set_xlim(0, len(self.chains_flat_no_discard))
-            ax.set_ylabel(self.label_interest[i])
+            ax.set_ylabel(self.label_interest[i], fontsize=16)
             ax.yaxis.set_label_coords(-0.1, 0.5)
-            ax.axvline(x = self.burn_in*self.nwalkers, color = 'r', alpha = 0.7, label = 'burn-in line')
+            ax.axvline(x = self.burn_in*self.nwalkers, color = 'r', alpha = 0.9, label = 'burn-in line')
             ax.legend()
-        fig.suptitle('Traço dos parametros de interesse', fontsize=16)
-        plt.tight_layout()
-        axes[-1].set_xlabel("step number");
+        fig.suptitle('Trace of average interest parameters', fontsize=20)
+        axes[-1].set_xlabel("Iterations", fontsize=17);
+
         
-        fig, axes = plt.subplots(self.n_dim_noise, figsize=(10, 7), sharex=True)
         label_noise = []
+        
         for i in range(self.n_dim_noise):
-            stg = f'R{i + 1}'
+            stg = f'$R_{{{i + 1}}}$'
             label_noise.append(stg)
-        for i in range(self.n_dim_noise):
-            ax = axes[i]
-            ax.plot(self.chains_flat_no_discard[:, i+4], "k", alpha=0.5)
-            ax.set_xlim(0, len(self.chains_flat_no_discard))
-            ax.set_ylabel(label_noise[i])
-            ax.set_yticklabels([])
-            ax.yaxis.set_label_coords(-0.1, 0.5)
-            ax.axvline(x =self.burn_in*self.nwalkers, color = 'r', alpha = 0.7, label = 'burn-in line')
-        fig.suptitle('Traço dos parametros de ruido', fontsize=16)
-        plt.legend(loc='upper right')
-        axes[-1].set_xlabel("step number");
+            
+         
+        for i in range(0,self.n_dim_noise,noise_axes):
+            fig, axs = plt.subplots(noise_axes, figsize=(10, 6), sharex=True)
+            for j in range(noise_axes):
+                if j+i< self.n_dim_noise:
+                    ax = axs[j]
+                    ax.plot(self.chains_flat_no_discard[:,i+j+4], "k")
+                    ax.set_xlim(0, len(self.chains_flat_no_discard))
+                    ax.set_ylabel(label_noise[i+j],fontsize=16)
+                    ax.set_yticklabels([])
+                    ax.yaxis.set_label_coords(-0.1, 0.5)
+                    ax.axvline(x =self.burn_in*self.nwalkers, color = 'r', alpha = 0.9, label = 'burn-in line')
+            
+            fig.suptitle(r'Trace of average noise rate parameters $R$ ', fontsize=20)
+            plt.legend(loc='upper right')
+            axs[-1].set_xlabel("Iterations", fontsize=17);
+            
+            
     
     def posterior_graph_interest_params(self):
         
@@ -331,15 +361,17 @@ class Signal_and_Hierachical_Noise_2:
         plt.tight_layout()
         plt.show()
             
-    def posterior_graph_noise_params(self):
-        fig, axs = plt.subplots(4, 4, figsize=(15, 10))  
+    def posterior_graph_noise_params(self,num_columns = 4):
+
+        num_lines = int(np.ceil(self.n_dim_noise / num_columns))
+        fig, axs = plt.subplots(num_lines, num_columns, figsize=(2.4*num_lines, 1.5*num_lines))  
 
         for i, ax in enumerate(axs.flat):
             if i <= (self.n_dim_noise-1):
                 ax.hist(self.chains_flat[:, i + 4], bins=100, color="k", histtype="step")
-                ax.set_title(f" Parametro Ruído {i + 1}")
+                ax.set_title(f" Noise Parameter {i + 1}")
 
-        fig.suptitle('Distribuição a Posteriori dos parametros de ruido', fontsize=16)
+        fig.suptitle('Posterior sampling of the noise parameters', fontsize=20)
         plt.tight_layout()
         plt.show()
         
@@ -348,6 +380,54 @@ class Signal_and_Hierachical_Noise_2:
         
         fig = corner.corner(self.chains_flat[:,:4], labels = self.label_interest)
         
+        
+    def pred_graph(self):
+        
+        font_ax = 13
+        counts, bins = np.histogram(self.pred_off, bins=100)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color='tomato', edgecolor='black', alpha=0.7, histtype='stepfilled',label='predictive')
+        
+        counts, bins = np.histogram(self.observed_value_off, bins=10)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color="k", histtype="stepfilled", 
+         label="data",alpha=0.5)
+
+        plt.title(" Predictive sampling OFF")
+        plt.xlabel('Events',fontsize=font_ax)
+        plt.ylabel('Frequency',fontsize=font_ax)
+        plt.legend()
+        plt.show()
+
+        counts, bins = np.histogram(self.pred_on, bins=100)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color='skyblue', edgecolor='black', alpha=0.7, histtype='stepfilled',label='predictive')
+        
+        counts, bins = np.histogram(self.observed_value_on, bins=20)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color="k", histtype="stepfilled", 
+         label="data",alpha=0.5)
+        
+        plt.title("Predictive sampling ON")
+        plt.xlabel('Events',fontsize=font_ax)
+        plt.ylabel('Frequency',fontsize=font_ax)
+        plt.legend()
+        plt.show()
+        
+        counts, bins = np.histogram(self.pred_cut, bins=100)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color='green', edgecolor='black', alpha=0.7, histtype='stepfilled',label='predictive')
+        
+        counts, bins = np.histogram(self.observed_value_noise, bins=20)
+        weights = counts / np.max(counts)
+        plt.hist(bins[:-1], bins, weights=weights,color="k", histtype="stepfilled", 
+         label="data",alpha=0.5)
+        
+        plt.title("Predictive sampling CUT")
+        plt.xlabel('Events',fontsize=font_ax)
+        plt.ylabel('Frequency',fontsize=font_ax)
+        plt.legend()
+        plt.show()
         
         
     def summary_sample_interes(self):
@@ -367,18 +447,35 @@ class Signal_and_Hierachical_Noise_2:
     
     '''ARVIZ TOOLS'''
 
-    def arviz_posterior_interest_plot(self):
+    def arviz_posterior_interest_plot(self, hdi = 0.96):
         
         az.style.use(["arviz-darkgrid", "arviz-cyanish"])
+        fontsize_axes= 12
+        fontsize_title = 15
         
-        az.plot_posterior(self.dataset,var_names=self.label_interest[0], 
-                          kind='hist', hdi_prob = 0.95, bins = 100)
+        fig = az.plot_posterior(self.dataset,var_names=self.label_interest[0], 
+                          kind='hist', hdi_prob =hdi, bins = 100)
+        plt.suptitle("Posterior sampling of the parameter:", fontsize=fontsize_title)
+        plt.xlabel('Parameter Value',fontsize=fontsize_axes)
+        plt.ylabel('Frequency',fontsize=fontsize_axes)
+        
         az.plot_posterior(self.dataset,var_names=self.label_interest[1], 
-                          kind='hist', hdi_prob = 0.95, bins = 100)
+                          kind='hist', hdi_prob = hdi, bins = 100)
+        plt.suptitle("Posterior sampling of the parameter:", fontsize=fontsize_title)
+        plt.xlabel('Parameter Value',fontsize=fontsize_axes)
+        plt.ylabel('Frequency',fontsize=fontsize_axes)
+        
         az.plot_posterior(self.dataset,var_names=self.label_interest[2], 
-                          kind='hist', hdi_prob = 0.95, bins = 100)
+                          kind='hist', hdi_prob = hdi, bins = 100)
+        plt.suptitle("Posterior sampling of the parameter:", fontsize=fontsize_title)
+        plt.xlabel('Parameter Value',fontsize=fontsize_axes)
+        plt.ylabel('Frequency',fontsize=fontsize_axes)
+        
         az.plot_posterior(self.dataset,var_names=self.label_interest[3], 
-                          kind='hist', hdi_prob = 0.95, bins = 100)
+                          kind='hist', hdi_prob = hdi, bins = 100)
+        plt.suptitle("Posterior sampling of the parameter:", fontsize=fontsize_title)
+        plt.xlabel('Parameter Value',fontsize=fontsize_axes)
+        plt.ylabel('Frequency',fontsize=fontsize_axes)
 
     def arviz_trace(self):
         az.plot_trace(self.dataset,var_names=self.label_interest)
@@ -392,8 +489,8 @@ class Signal_and_Hierachical_Noise_2:
             linestyle="-", marker=None
             )
         
-    def arviz_summary_stats(self):
-        self.az_sum_stats = az.summary(self.dataset,kind = 'stats',
+    def arviz_summary_stats(self, hdi = 0.96):
+        self.az_sum_stats = az.summary(self.dataset,kind = 'stats',hdi_prob=hdi,
                                        var_names=self.label_interest,round_to=2)
         print("Stats")
         print(self.az_sum_stats)
