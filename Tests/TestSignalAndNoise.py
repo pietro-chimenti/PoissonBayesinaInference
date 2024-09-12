@@ -35,18 +35,20 @@ test1 = SN.SignalAndNoise(data_off,data_on ,'uniform','uniform')
 test1.run(samples=samples, burn_in= burn_in,n_chains = n_chains, nwalkers= nwalkers)
 
 # %% Analisys Test 1
-
+'''
 ds = test1.full_arviz_dataset()
 single_chain = test1.single_chain_arvis_dataset()
 
 test1.diagnose(ds, single_chain, bins = bins, title = "Test 1")
 
+test1.posterior_plot(ds)
+
 test1.statistic_error()
+'''
 
-x, y = test1.preditive_distribution()
+x = test1.preditive_distribution()
 
-
-
+aic = test1.aic()
   
 
     

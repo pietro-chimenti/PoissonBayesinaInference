@@ -8,7 +8,11 @@ from scipy import optimize
 from scipy.stats import poisson
 from scipy.stats import gamma 
 from scipy.stats import nbinom
+import matplotlib.pyplot as plt
 import pandas as pd
+import math
+from scipy.special import gammaln
+from scipy.optimize import minimize
 
 
 class BasicPoisson :
@@ -29,15 +33,12 @@ class BasicPoisson :
         r = sum(data) + shape
         v =  len(data) + scale
         return r, v
-    
 
-    
     def __init__(self, observed_value, prior = 'uniform', mean = 0, std = 0, *args):
         '''
         Receive the users data and the prior used (Uniform, Jeffrey´s, Gamma), 
         and calculate the posterior distribution.
         '''
-    
         # Users Data
         self.ov = observed_value
         
@@ -67,14 +68,30 @@ class BasicPoisson :
         self.IQR = self.up - self.low
         
         # Summary Table
-        self.summary = pd.Series({'Mean': self.mean,'Median': self.median,'Mode': self.mode,'Variance': self.var,'Low Quartile':self.low,'Up Quartile': self.up ,'IQR' : self.IQR})
-        self.df = pd.DataFrame([self.summary])
+        self.summary = pd.Series({'Mean': round(float(self.mean),3),'Median': self.median,'Mode': self.mode,'Variance': round(float(self.var),3),'Low Quartile':self.low,'Up Quartile': self.up ,'IQR' : self.IQR})
+        self.df = pd.DataFrame([self.summary]).round(1)
+        
+    def posterior_distribution(self):
+        return self.interval, self.distribution
     
     def data_summarry(self):
         """ Prints the posterior distribution summaries"""
         
         print("Posterior Summaries")
         print(self.df.T)
+        return self.df
+    
+    def data_summarry_image(self):
+        df = self.df
+        fig, ax = plt.subplots(figsize=(8, 2))
+        ax.axis('tight')
+        ax.axis('off')
+        tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center', colColours=['#f2f2f2']*len(df.columns))
+        tabela.auto_set_font_size(False)
+        tabela.set_fontsize(12)
+        tabela.scale(1.5, 1.5)
+        plt.title("Medidas Resumo da Distribuição a Posteriori")
+        plt.show()
         
     def credible_interval(self,trust = 0.95, option = 1):
         '''
@@ -118,7 +135,7 @@ class BasicPoisson :
             print("Invalid Input")
             sys.exit(0)
             
-    def predictive_posterior_run(self):
+    def predictive_posterior_run(self, bins=10):
         def negative_binomial_change(r, v):
             '''
             This function receives gamma's prior parameters and return the updated
@@ -126,12 +143,40 @@ class BasicPoisson :
             alpha = r
             beta = v/(v+1)
             return alpha, beta
+        
         alpha, beta = negative_binomial_change(r = self.r,v = self.v)
-        x = np.arange(nbinom.ppf(0.0001,n=alpha, p=beta),nbinom.ppf(0.999,n=alpha,p=beta))
+        x = np.linspace(nbinom.ppf(0.0001,n=alpha, p=beta),nbinom.ppf(0.999,n=alpha,p=beta),bins, dtype = int)
         post_predi = nbinom.pmf(x, n=alpha, p= beta)
         
         p_value = 1 - nbinom.pmf(self.ov,n=alpha, p=beta)
+       
         return x, post_predi, p_value
     
+    
+    def aic(self):
+        np.random.seed(42)
+        data = np.array(self.ov)
+        x0 = np.mean(data)
+        
+        # Função de log-verossimilhança para Poisson
+        def log_likelihood_array(lmbda, data):
+            return -len(data)*lmbda + np.sum(data*np.log(lmbda)) - np.sum(gammaln(data + 1))
+        
+        # Estimativa de Máxima Verossimilhança
+        result = minimize(log_likelihood_array,x0,args = data)
+        lambda_estimado = result.x
+        '''
+        def poisson_log_likelihood(lmbda, x):
+            log_likelihood = -lmbda + x * np.log(lmbda) - math.lgamma(x + 1)
+            return log_likelihood
+        '''
+        prob_list = []
+        for i in data:
+            i = np.array([i])
+            prob = log_likelihood_array(lambda_estimado,i)
+            prob_list.append(prob)
+        
+        aic = -2*(sum(prob_list) - 1)
+        return aic
     
     
