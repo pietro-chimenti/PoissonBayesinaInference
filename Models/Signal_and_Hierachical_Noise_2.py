@@ -295,7 +295,7 @@ class Signal_and_Hierachical_Noise_2:
     
     '''BASIC GRAPHICS'''    
     
-    def trace_plot(self, noise_axes=10):
+    def trace_plot(self, noise_axes=11):
         az.style.use(["arviz-darkgrid", "arviz-cyanish"])
         fig, axes = plt.subplots(4, figsize=(10, 6), sharex=True)
         for i in range(4):
